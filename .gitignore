@@ -1,0 +1,12 @@
+inputs/*.txt
+reference/
+
+# Racket build artifacts
+compiled/
+*.zo
+*.dep
+
+# Editor/system artifacts
+.vscode/
+.DS_Store
+Thumbs.db
