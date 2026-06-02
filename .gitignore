@@ -10,3 +10,7 @@ compiled/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Tooling / local config
+.claude/
+.obsidian/
