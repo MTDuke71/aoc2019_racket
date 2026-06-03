@@ -14,7 +14,8 @@
 
 (require racket/runtime-path
          "../src/aoc.rkt"
-         (prefix-in d01: "../src/day01.rkt"))
+         (prefix-in d01: "../src/day01.rkt")
+         (prefix-in d02: "../src/day02.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -41,3 +42,8 @@
 (printf "|-----|-----------|-------------|-------------|------------|\n")
 
 (bench-day "01" (read-day-input 1) d01:parse-input d01:part1 d01:part2)
+;; Day 2's Part 2 brute-forces the full 100x100 (noun, verb) grid on every
+;; call (~5300 program runs), so it gets a far smaller iteration count than
+;; Day 1's microsecond kernels — 200 is plenty for a stable mean here.
+(bench-day "02" (read-day-input 2) d02:parse-input d02:part1 d02:part2
+           #:iters 200)
