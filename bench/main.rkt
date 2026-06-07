@@ -15,7 +15,9 @@
 (require racket/runtime-path
          "../src/aoc.rkt"
          (prefix-in d01: "../src/day01.rkt")
-         (prefix-in d02: "../src/day02.rkt"))
+         (prefix-in d02: "../src/day02.rkt")
+         (prefix-in d03:  "../src/day03.rkt")
+         (prefix-in d03a: "../src/day03a.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -47,3 +49,20 @@
 ;; Day 1's microsecond kernels — 200 is plenty for a stable mean here.
 (bench-day "02" (read-day-input 2) d02:parse-input d02:part1 d02:part2
            #:iters 200)
+;; Day 3's part1 and part2 each rasterize both wires (~150k unit cells)
+;; into immutable hashes, so a single part call is real work — 200
+;; iterations is plenty for a stable mean without minutes of bench time.
+(bench-day "03" (read-day-input 3) d03:parse-input d03:part1 d03:part2
+           #:iters 200)
+
+;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
+;; that win only shows at solve granularity: the idiomatic solve runs part1
+;; THEN part2 — each calls `crossings`, each `crossings` traces both wires,
+;; so a solve rasterizes the pair 4 times. day03a's `both-parts` traces it
+;; once. Compare like-for-like on the real input.
+(let ([wires (d03:parse-input (read-day-input 3))])
+  (printf "\nsolve-granularity (real input, mean of 200 iters):\n")
+  (printf "  day03  part1 then part2 (crossings x2, 4 traces): ~a ms\n"
+          (ms (bench-ms (lambda () (d03:part1 wires) (d03:part2 wires)) #:iters 200)))
+  (printf "  day03a both-parts       (crossings x1, 2 traces): ~a ms\n"
+          (ms (bench-ms (lambda () (d03a:both-parts wires)) #:iters 200))))
