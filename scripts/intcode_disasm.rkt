@@ -1,25 +1,29 @@
 #lang racket
 
-;; Intcode disassembler + symbolic decompiler (Day 2 opcode subset: 1/2/99).
+;; Intcode disassembler + symbolic decompiler.
 ;;
-;; Two passes over a Day 2 Intcode program:
+;; Two eras of Intcode, two strategies:
 ;;
-;;   1. LINEAR DISASSEMBLY — sweep the instruction pointer from 0, decode
-;;      each 4-wide add/mul instruction into `mem[dst] = mem[a] OP mem[b]`,
-;;      stop at the `99` halt, and dump whatever trails the halt as data.
+;;   * DAY 2 subset (opcodes 1/2/99, all position mode, no branches). A
+;;     LINEAR sweep is a complete disassembly because the code is one
+;;     straight basic block. A second pass does SYMBOLIC EXECUTION over the
+;;     abstract domain of affine forms `c0 + c1·noun + c2·verb` to *prove*
+;;     the output is affine (the basis of Day 2's closed-form Part 2). If a
+;;     multiply ever has two non-constant operands the result is quadratic
+;;     and the abstract interpreter fails loudly.
 ;;
-;;   2. SYMBOLIC EXECUTION — re-run the program in the abstract domain of
-;;      *affine forms* `c0 + c1·noun + c2·verb`. Position 1 starts as the
-;;      symbol `noun`, position 2 as `verb`, everything else as a constant.
-;;      Every add/mul combines two affine forms. If a multiply ever has
-;;      two non-constant operands the result is quadratic and the abstract
-;;      interpretation *fails loudly* — completing the run without that
-;;      failure is a PROOF that the program's output is affine in (noun,
-;;      verb), which is the whole basis of Day 2's closed-form Part 2.
+;;   * DAY 5+ subset (opcodes 1–8/99, parameter modes, jumps). A linear
+;;     sweep stops being correct: jump opcodes (5/6) make the next
+;;     instruction address data-dependent, and the program interleaves code
+;;     with jump-table data, so decode order no longer matches address
+;;     order. We switch to RECURSIVE-DESCENT (control-flow-following)
+;;     disassembly: start at the entry point, decode, and follow each
+;;     instruction's successors — fall-through for sequential ops, and BOTH
+;;     the fall-through and the (static, immediate-mode) target for jumps.
+;;     Only cells actually reachable as code get decoded; the rest are data.
 ;;
-;; This is the same machinery a real decompiler uses: abstract
-;; interpretation, where you run the program over a lattice of approximate
-;; values (here: linear polynomials) instead of concrete integers.
+;; The script auto-detects which era a program belongs to (by the opcodes
+;; its reachable code uses) and runs the matching passes.
 ;;
 ;; Usage:  racket scripts/intcode_disasm.rkt [path-to-input]
 ;;         (defaults to inputs/day02.txt)
@@ -31,6 +35,13 @@
 (define (load-program path)
   (list->vector (map string->number
                      (string-split (string-trim (file->string path)) ","))))
+
+(define (pad n)  (~a n #:min-width 4 #:align 'right))
+(define (pad3 n) (~a n #:min-width 3 #:align 'right))
+
+;; ===========================================================================
+;; DAY 2 ERA — linear disassembly + affine symbolic execution
+;; ===========================================================================
 
 ;; ---------------------------------------------------------------------------
 ;; Affine forms: c0 + c1·noun + c2·verb, stored as (vector c0 c1 c2).
@@ -79,7 +90,7 @@
         [else (string-join parts " + ")]))
 
 ;; ---------------------------------------------------------------------------
-;; Pass 1: linear disassembly.
+;; Pass 1: linear disassembly (Day 2 subset).
 ;; ---------------------------------------------------------------------------
 
 (define (disassemble prog)
@@ -112,11 +123,8 @@
                (format "mem[~a]=~a" i (vector-ref prog i)))
              ", "))))
 
-(define (pad n)  (~a n #:min-width 4 #:align 'right))
-(define (pad3 n) (~a n #:min-width 3 #:align 'right))
-
 ;; ---------------------------------------------------------------------------
-;; Pass 2: symbolic execution over affine forms.
+;; Pass 2: symbolic execution over affine forms (Day 2 subset).
 ;; ---------------------------------------------------------------------------
 
 (define (symbolic prog #:trace? [trace? #f])
@@ -125,8 +133,6 @@
   (when trace?
     (printf "Only steps whose result depends on noun/verb are shown.\n"))
   (printf "\n")
-  ;; Abstract memory: each cell is an affine form. Addresses are still read
-  ;; from the *concrete* program (operand positions are always literals).
   (define amem (build-vector (vector-length prog)
                              (lambda (i) (aff-const (vector-ref prog i)))))
   (vector-set! amem 1 noun-sym)
@@ -157,7 +163,163 @@
           (vector-ref out 0) (vector-ref out 1) (vector-ref out 2))
   out)
 
+;; ===========================================================================
+;; DAY 5+ ERA — mode-aware decode + recursive-descent disassembly
+;; ===========================================================================
+
+;; opcode -> (mnemonic . width), where width counts the opcode cell.
+(define op-table
+  (hash 1 '(add . 4) 2 '(mul . 4) 3 '(in . 2) 4 '(out . 2)
+        5 '(jt  . 3) 6 '(jf  . 3) 7 '(lt . 4) 8 '(eq  . 4) 99 '(halt . 1)))
+
+;; Parameter mode of the nth (1-based) parameter of instruction word `instr`:
+;; the nth digit above the two-digit opcode. 0 = position, 1 = immediate.
+(define (param-mode instr n)
+  (modulo (quotient instr (* 100 (expt 10 (sub1 n)))) 10))
+
+;; Render a READ operand (mode-aware): #k for immediate, mem[k] for position.
+(define (render-read prog ip n)
+  (define raw (vector-ref prog (+ ip n)))
+  (if (= 1 (param-mode (vector-ref prog ip) n))
+      (format "#~a" raw)
+      (format "mem[~a]" raw)))
+
+;; Render a WRITE operand — always position mode by spec.
+(define (render-write prog ip n)
+  (format "mem[~a]" (vector-ref prog (+ ip n))))
+
+;; Decode one instruction at ip: return (values text width successors).
+;; `successors` are the addresses control can flow to next. For jumps we
+;; include the fall-through AND the target when the target is an immediate
+;; (statically known); a position-mode target is data-dependent and omitted.
+(define (decode prog ip)
+  (define instr (vector-ref prog ip))
+  (define op (modulo instr 100))
+  (define entry (hash-ref op-table op #f))
+  (cond
+    [(not entry) (values (format "??? raw=~a" instr) 1 '())]
+    [else
+     (define (R n) (render-read prog ip n))
+     (define (W n) (render-write prog ip n))
+     (case op
+       [(1)  (values (format "~a = ~a + ~a"  (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
+       [(2)  (values (format "~a = ~a * ~a"  (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
+       [(3)  (values (format "~a = INPUT"    (W 1))             2 (list (+ ip 2)))]
+       [(4)  (values (format "OUTPUT ~a"     (R 1))             2 (list (+ ip 2)))]
+       [(5)  (values (format "if ~a != 0 jump ~a" (R 1) (R 2))  3 (jump-succs prog ip))]
+       [(6)  (values (format "if ~a == 0 jump ~a" (R 1) (R 2))  3 (jump-succs prog ip))]
+       [(7)  (values (format "~a = (~a < ~a)"  (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
+       [(8)  (values (format "~a = (~a == ~a)" (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
+       [(99) (values "HALT" 1 '())])]))
+
+(define (jump-succs prog ip)
+  (define fall (+ ip 3))
+  (if (= 1 (param-mode (vector-ref prog ip) 2))
+      (list fall (vector-ref prog (+ ip 2)))   ; immediate target is static
+      (list fall)))                            ; position target: unknown
+
+;; Recursive-descent: follow control flow from address 0, returning a hash
+;; ip -> (text . width) for every instruction reachable as code.
+(define (trace-code prog)
+  (define n (vector-length prog))
+  (define starts (make-hash))
+  (let loop ([work (list 0)])
+    (unless (null? work)
+      (define ip (car work))
+      (cond
+        [(or (< ip 0) (>= ip n) (hash-has-key? starts ip))
+         (loop (cdr work))]
+        [else
+         (define-values (text width succs) (decode prog ip))
+         (hash-set! starts ip (cons text width))
+         (loop (append succs (cdr work)))])))
+  starts)
+
+;; Print the reachable code in address order, with non-code cells shown as
+;; data runs. Returns the list of decoded opcodes (for the summary).
+(define (disassemble-cfg prog starts)
+  (printf "=== RECURSIVE-DESCENT DISASSEMBLY (control-flow-following) ===\n")
+  (printf "addr | raw                      | operation\n")
+  (printf "-----+--------------------------+-------------------------------------\n")
+  (define n (vector-length prog))
+  (define (flush data)            ; data: indices accumulated in reverse
+    (unless (null? data)
+      (define idxs (reverse data))
+      (define vals (for/list ([i (in-list idxs)]) (vector-ref prog i)))
+      (define shown
+        (if (> (length vals) 12)
+            (string-append (string-join (map number->string (take vals 12)) ", ")
+                           (format ", … (~a data cells)" (length vals)))
+            (string-join (map number->string vals) ", ")))
+      (printf "~a | ~a | data: ~a\n"
+              (pad (first idxs)) (~a "" #:min-width 24) shown)))
+  (let loop ([i 0] [data '()] [ops '()])
+    (cond
+      [(>= i n) (flush data) (reverse ops)]
+      [(hash-has-key? starts i)
+       (flush data)
+       (match-define (cons text width) (hash-ref starts i))
+       (define raw (string-join (for/list ([k (in-range width)])
+                                  (number->string (vector-ref prog (+ i k)))) " "))
+       (printf "~a | ~a | ~a\n" (pad i) (~a raw #:min-width 24) text)
+       (loop (+ i width) '() (cons (modulo (vector-ref prog i) 100) ops))]
+      [else (loop (+ i 1) (cons i data) ops)])))
+
+(define op-name (hash 1 "add" 2 "mul" 3 "in" 4 "out"
+                      5 "jump-if-true" 6 "jump-if-false"
+                      7 "less-than" 8 "equals" 99 "halt"))
+
+(define (summarize-ops ops)
+  (printf "\n=== REACHABLE-CODE OPCODE HISTOGRAM ===\n")
+  (define counts (make-hash))
+  (for ([o (in-list ops)]) (hash-update! counts o add1 0))
+  (printf "~a instructions reachable from entry.\n\n" (length ops))
+  (for ([o (in-list (sort (hash-keys counts) <))])
+    (printf "  ~a  ~a (~a)\n"
+            (~a (hash-ref counts o) #:min-width 4 #:align 'right)
+            (hash-ref op-name o "?") o))
+  (define cmp (+ (hash-ref counts 7 0) (hash-ref counts 8 0)))
+  (define jmp (+ (hash-ref counts 5 0) (hash-ref counts 6 0)))
+  (printf "\n  comparisons (less-than + equals): ~a\n" cmp)
+  (printf "  jumps       (jit + jif):          ~a\n" jmp))
+
 ;; ---------------------------------------------------------------------------
+;; Dynamic disassembly: execute the program (so self-modification resolves),
+;; decoding each instruction against LIVE memory. This is the correct
+;; disassembly when static descent is defeated by self-modifying code.
+;; Returns (values executed-opcodes outputs instruction-count).
+;; ---------------------------------------------------------------------------
+(define (trace-exec prog input #:log? [log? #f] #:limit [limit 1000000])
+  (define mem (vector-copy prog))
+  (define (val ip n)
+    (define raw (vector-ref mem (+ ip n)))
+    (if (= 1 (param-mode (vector-ref mem ip) n)) raw (vector-ref mem raw)))
+  (define (dst ip n) (vector-ref mem (+ ip n)))
+  (let loop ([ip 0] [ops '()] [outs '()] [count 0])
+    (when (> count limit) (error 'trace-exec "instruction limit exceeded"))
+    (when log?
+      (define-values (text _w _s) (decode mem ip))
+      (printf "~a | ~a\n" (pad ip) text))
+    (define op (modulo (vector-ref mem ip) 100))
+    (define (step ip* o) (loop ip* (cons op ops) o (add1 count)))
+    (case op
+      [(1)  (vector-set! mem (dst ip 3) (+ (val ip 1) (val ip 2))) (step (+ ip 4) outs)]
+      [(2)  (vector-set! mem (dst ip 3) (* (val ip 1) (val ip 2))) (step (+ ip 4) outs)]
+      [(3)  (vector-set! mem (dst ip 1) input)                     (step (+ ip 2) outs)]
+      [(4)  (step (+ ip 2) (cons (val ip 1) outs))]
+      [(5)  (step (if (not (zero? (val ip 1))) (val ip 2) (+ ip 3)) outs)]
+      [(6)  (step (if (zero? (val ip 1))       (val ip 2) (+ ip 3)) outs)]
+      [(7)  (vector-set! mem (dst ip 3) (if (< (val ip 1) (val ip 2)) 1 0)) (step (+ ip 4) outs)]
+      [(8)  (vector-set! mem (dst ip 3) (if (= (val ip 1) (val ip 2)) 1 0)) (step (+ ip 4) outs)]
+      [(99) (values (reverse ops) (reverse outs) count)]
+      [else (error 'trace-exec "bad opcode ~a at ~a" op ip)])))
+
+;; ===========================================================================
+
+;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
+(define (day2-era? starts prog)
+  (for/and ([ip (in-list (hash-keys starts))])
+    (memv (modulo (vector-ref prog ip) 100) '(1 2 99))))
 
 (module+ main
   (define path
@@ -167,5 +329,26 @@
           (vector-ref args 0))))
   (define prog (load-program path))
   (printf "Program: ~a cells from ~a\n\n" (vector-length prog) path)
-  (disassemble prog)
-  (void (symbolic prog #:trace? #t)))
+  (define starts (trace-code prog))
+  (cond
+    [(day2-era? starts prog)
+     ;; Branchless Day 2 code: linear sweep + affine proof.
+     (disassemble prog)
+     (void (symbolic prog #:trace? #t))]
+    [else
+     ;; Day 5+ : static recursive descent first (to expose its limits),
+     ;; then the dynamic trace that actually disassembles the program.
+     (define static-ops (disassemble-cfg prog starts))
+     (printf "\nStatic descent decoded only ~a instruction(s) before control\n"
+             (length static-ops))
+     (printf "flowed into a cell modified at runtime: this program is\n")
+     (printf "SELF-MODIFYING, so static disassembly is incomplete. Executing\n")
+     (printf "the program is the only faithful disassembly.\n")
+     (for ([in (in-list '(1 5))])
+       (define-values (exec-ops outs count) (trace-exec prog in))
+       (printf "\n=== DYNAMIC TRACE — input ~a ===\n" in)
+       (printf "~a instructions executed.\n" count)
+       (printf "outputs (~a): ~a\n" (length outs) outs)
+       (summarize-ops exec-ops))
+     (printf "\nAffine symbolic pass skipped: this program branches, so its\n")
+     (printf "output is not a single affine form of the input (Day 2 only).\n")]))

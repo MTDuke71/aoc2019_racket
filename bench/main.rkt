@@ -18,7 +18,8 @@
          (prefix-in d02: "../src/day02.rkt")
          (prefix-in d03:  "../src/day03.rkt")
          (prefix-in d03a: "../src/day03a.rkt")
-         (prefix-in d04:  "../src/day04.rkt"))
+         (prefix-in d04:  "../src/day04.rkt")
+         (prefix-in d05:  "../src/day05.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -60,6 +61,10 @@
 ;; is tens of milliseconds — 50 iterations is plenty for a stable mean.
 (bench-day "04" (read-day-input 4) d04:parse-input d04:part1 d04:part2
            #:iters 50)
+;; Day 5 runs the ~680-int diagnostic program once per part — a few hundred
+;; instructions, sub-millisecond — so 2000 iterations gives a stable mean.
+(bench-day "05" (read-day-input 5) d05:parse-input d05:part1 d05:part2
+           #:iters 2000)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1

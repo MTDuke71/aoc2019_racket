@@ -287,6 +287,13 @@ When Day 5 lands and the VM gets extracted into `src/intcode.rkt`, this
 script is the natural seed for a `tools/`-grade disassembler that grows
 the same way the VM does.
 
+**Update — Day 5 landed.** The script now decodes parameter modes and does
+recursive-descent (control-flow-following) disassembly, exactly as
+anticipated above. It also turned up a wrinkle this section *didn't* foresee:
+the Day 5 input is **self-modifying**, which defeats static disassembly
+outright and forces a dynamic (executing) trace. The full writeup is in
+[day05_disassembly.md](day05_disassembly.md).
+
 ---
 
 ## See also
