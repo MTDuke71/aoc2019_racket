@@ -180,6 +180,42 @@ function guide's `(andmap zero? (drop-right outs 1))` assertion is checking
 the suite's own contract — *every test before the diagnostic code reports
 success* — and the disassembly shows what those tests physically are.
 
+### Corollary: the Part 1 / Part 2 split *is* the opcode split
+
+The input-1 histogram has a sharp consequence: it contains **no opcodes
+`5`–`8` at all**. So Part 1 is solvable by an interpreter that doesn't even
+*implement* jumps and comparisons — only `1`/`2`/`3`/`4`/`99` plus parameter
+modes. The two halves of the puzzle map exactly onto two halves of the
+instruction set:
+
+| | Opcodes exercised | Features under test |
+|---|---|---|
+| **Part 1** (input `1`) | `1 2 3 4 99` + modes | arithmetic, I/O, immediate vs position |
+| **Part 2** (input `5`) | the above **+ `5 6 7 8`** | jumps + comparisons |
+
+This is not a guess — strip opcodes `5`–`8` out of the interpreter entirely
+(make them raise) and run both inputs:
+
+```
+Part 1 with a 1/2/3/4/99-only interpreter: 6731945     ; correct
+input 5 with the same interpreter:         error — hit opcode 5 at address 6
+```
+
+Part 1 still produces the right answer; input 5 dies *immediately*, and it
+dies at **address 6** — the polymorphic dispatch cell from the previous
+section. Seen from this side, address 6 is the exact boundary between "Part
+1 needs nothing past Day 2 + modes + I/O" and "Part 2 needs control flow":
+the first instruction system-ID 5 reaches that system-ID 1 never does is the
+opcode-5 jump that cell becomes (`5 + 1100 = 1105`).
+
+The staging is deliberate on AoC's part — Part 1's prose introduces modes
+and I/O; Part 2's prose introduces jumps and compares — and the input
+*enforces* it. A subtle trap falls out: if you implemented only through Part
+1, your jump/compare opcodes would be completely **untested**, because the
+air-conditioner path never executes one. Part 2's input `5` is what forces
+those opcodes to run, which is the whole point of a diagnostic that selects
+its battery by input.
+
 ---
 
 ## The disassembly-theory connections
