@@ -17,7 +17,8 @@
          (prefix-in d01: "../src/day01.rkt")
          (prefix-in d02: "../src/day02.rkt")
          (prefix-in d03:  "../src/day03.rkt")
-         (prefix-in d03a: "../src/day03a.rkt"))
+         (prefix-in d03a: "../src/day03a.rkt")
+         (prefix-in d04:  "../src/day04.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -54,6 +55,11 @@
 ;; iterations is plenty for a stable mean without minutes of bench time.
 (bench-day "03" (read-day-input 3) d03:parse-input d03:part1 d03:part2
            #:iters 200)
+;; Day 4 brute-forces every number in the ~510k-wide range on each part
+;; call (digits + run-length-encode per candidate), so a single part call
+;; is tens of milliseconds — 50 iterations is plenty for a stable mean.
+(bench-day "04" (read-day-input 4) d04:parse-input d04:part1 d04:part2
+           #:iters 50)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
