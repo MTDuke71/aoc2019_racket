@@ -19,7 +19,8 @@
          (prefix-in d03:  "../src/day03.rkt")
          (prefix-in d03a: "../src/day03a.rkt")
          (prefix-in d04:  "../src/day04.rkt")
-         (prefix-in d05:  "../src/day05.rkt"))
+         (prefix-in d05:  "../src/day05.rkt")
+         (prefix-in d06:  "../src/day06.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -65,6 +66,11 @@
 ;; instructions, sub-millisecond — so 2000 iterations gives a stable mean.
 (bench-day "05" (read-day-input 5) d05:parse-input d05:part1 d05:part2
            #:iters 2000)
+;; Day 6's part1 re-walks each of ~900 nodes' ancestor chains (O(n*depth),
+;; low single-digit ms); parse and part2 are sub-millisecond — 500
+;; iterations gives a stable mean without dominating the bench run.
+(bench-day "06" (read-day-input 6) d06:parse-input d06:part1 d06:part2
+           #:iters 500)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
