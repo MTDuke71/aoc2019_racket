@@ -263,9 +263,8 @@ with two additions the later days force:
 
 - **Input queues (Day 7).** `trace-exec` takes a single `input` value
   because the TEST program reads input once. [Day 7](day07_function_guide.md)
-  feeds a *stream* of inputs and pauses mid-program waiting for more; the
-  tracer's `3` case would read from a queue and the loop would need a
-  "blocked on input" exit alongside `halt`.
+  feeds a *stream* of inputs; the script's `trace-exec/inputs` and
+  `run-day7-disasm` handle this — see [day07_disassembly.md](day07_disassembly.md).
 - **Relative mode + relative base (Day 9).** A third parameter mode (`2`)
   and a movable base register join `param-mode`; the decoder gains a
   `rel[k]` operand rendering and the executor a `base` accumulator. The

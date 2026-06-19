@@ -20,7 +20,8 @@
          (prefix-in d03a: "../src/day03a.rkt")
          (prefix-in d04:  "../src/day04.rkt")
          (prefix-in d05:  "../src/day05.rkt")
-         (prefix-in d06:  "../src/day06.rkt"))
+         (prefix-in d06:  "../src/day06.rkt")
+         (prefix-in d07:  "../src/day07.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -71,6 +72,10 @@
 ;; iterations gives a stable mean without dominating the bench run.
 (bench-day "06" (read-day-input 6) d06:parse-input d06:part1 d06:part2
            #:iters 500)
+;; Day 7 brute-forces 5! = 120 phase permutations per part; Part 2 runs five
+;; cooperative VMs per permutation — low tens of ms total — 200 iters is plenty.
+(bench-day "07" (read-day-input 7) d07:parse-input d07:part1 d07:part2
+           #:iters 200)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1

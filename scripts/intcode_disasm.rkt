@@ -22,13 +22,17 @@
 ;;     the fall-through and the (static, immediate-mode) target for jumps.
 ;;     Only cells actually reachable as code get decoded; the rest are data.
 ;;
-;; The script auto-detects which era a program belongs to (by the opcodes
-;; its reachable code uses) and runs the matching passes.
+;; The script auto-detects which era a program belongs to (by opcodes and
+;; filename) and runs the matching passes:
+;;   Day 2  — linear sweep + affine symbolic proof
+;;   Day 5  — recursive descent (shows self-mod limits) + dynamic trace
+;;   Day 7  — phase dispatch table + module disassembly + per-phase trace
 ;;
 ;; Usage:  racket scripts/intcode_disasm.rkt [path-to-input]
 ;;         (defaults to inputs/day02.txt)
 
-(require racket/runtime-path)
+(require racket/runtime-path
+         (prefix-in d05: "../src/day05.rkt"))
 
 (define-runtime-path here ".")
 
@@ -314,6 +318,89 @@
       [(99) (values (reverse ops) (reverse outs) count)]
       [else (error 'trace-exec "bad opcode ~a at ~a" op ip)])))
 
+;; Dynamic trace with an input queue (Day 7 amplifiers). Uses growable memory.
+;; Returns (values executed-opcodes outputs instruction-count).
+(define (trace-exec/inputs prog inputs #:log? [log? #f] #:limit [limit 1000000])
+  (define mem (d05:intcode-mem prog))
+  (define (val ip n)
+    (define raw (d05:intcode-ref mem (+ ip n)))
+    (if (= 1 (param-mode (d05:intcode-ref mem ip) n)) raw (d05:intcode-ref mem raw)))
+  (define (dst ip n) (d05:intcode-ref mem (+ ip n)))
+  (let loop ([ip 0] [pending inputs] [ops '()] [outs '()] [count 0])
+    (when (> count limit) (error 'trace-exec/inputs "instruction limit exceeded"))
+    (when log?
+      (define-values (text _w _s) (decode (unbox mem) ip))
+      (printf "~a | ~a\n" (pad ip) text))
+    (define op (modulo (d05:intcode-ref mem ip) 100))
+    (define (step ip* o p) (loop ip* p (cons op ops) o (add1 count)))
+    (case op
+      [(1)  (d05:intcode-set! mem (dst ip 3) (+ (val ip 1) (val ip 2))) (step (+ ip 4) outs pending)]
+      [(2)  (d05:intcode-set! mem (dst ip 3) (* (val ip 1) (val ip 2))) (step (+ ip 4) outs pending)]
+      [(3)  (unless (pair? pending) (error 'trace-exec/inputs "input exhausted at ~a" ip))
+             (d05:intcode-set! mem (dst ip 1) (car pending))
+             (step (+ ip 2) outs (cdr pending))]
+      [(4)  (step (+ ip 2) (cons (val ip 1) outs) pending)]
+      [(5)  (step (if (not (zero? (val ip 1))) (val ip 2) (+ ip 3)) outs pending)]
+      [(6)  (step (if (zero? (val ip 1))       (val ip 2) (+ ip 3)) outs pending)]
+      [(7)  (d05:intcode-set! mem (dst ip 3) (if (< (val ip 1) (val ip 2)) 1 0)) (step (+ ip 4) outs pending)]
+      [(8)  (d05:intcode-set! mem (dst ip 3) (if (= (val ip 1) (val ip 2)) 1 0)) (step (+ ip 4) outs pending)]
+      [(99) (values (reverse ops) (reverse outs) count)]
+      [else (error 'trace-exec/inputs "bad opcode ~a at ~a" op ip)])))
+
+;; Static disassembly of one straight-line module from `start` until HALT.
+(define (disasm-module prog start [max 30])
+  (printf "--- module entry ~a ---\n" start)
+  (let loop ([ip start] [n 0])
+    (when (< n max)
+      (define-values (text width _s) (decode prog ip))
+      (define op (modulo (vector-ref prog ip) 100))
+      (define raw (string-join (for/list ([k (in-range width)])
+                                 (number->string (vector-ref prog (+ ip k)))) " "))
+      (printf "~a | ~a | ~a\n" (pad ip) (~a raw #:min-width 24) text)
+      (unless (= op 99) (loop (+ ip width) (add1 n))))))
+
+(define (day7-amplifier? path prog)
+  (define s (if (path? path) (path->string path) path))
+  (and (regexp-match? #rx"day07" s)
+       (>= (vector-length prog) 21)
+       (= (vector-ref prog 0) 3)
+       (= (vector-ref prog 1) 8)))
+
+(define (run-day7-disasm prog)
+  (printf "=== AMPLIFIER DISPATCH PROLOGUE (static) ===\n")
+  (printf "addr | raw                      | operation\n")
+  (printf "-----+--------------------------+-------------------------------------\n")
+  (for ([ip '(0 2 6)])
+    (define-values (text width _s) (decode prog ip))
+    (define raw (string-join (for/list ([k (in-range width)])
+                               (number->string (vector-ref prog (+ ip k)))) " "))
+    (printf "~a | ~a | ~a\n" (pad ip) (~a raw #:min-width 24) text))
+  (printf "\nThe jump at address 6 uses position-mode target mem[8]. Static decode\n")
+  (printf "shows mem[0] (the on-disk value at address 8 is 0), but the prior\n")
+  (printf "instruction just wrote phase+10 into mem[8], so at runtime the jump\n")
+  (printf "goes to mem[phase+10] — the dispatch table entry. Operand overlap.\n")
+  (printf "\n=== PHASE DISPATCH TABLE (mem[10..19]) ===\n")
+  (for ([p (in-range 10)])
+    (printf "  phase ~a  ->  ip ~a\n" p (vector-ref prog (+ 10 p))))
+  (printf "\n=== PART 1 MODULES (phases 0–4): static disassembly ===\n")
+  (printf "Each module: INPUT signal -> affine arithmetic -> one OUTPUT -> HALT\n\n")
+  (for ([p (in-range 5)])
+    (disasm-module prog (vector-ref prog (+ 10 p))))
+  (printf "\n=== PART 2 MODULES (phases 5–9): static disassembly (first lines) ===\n")
+  (printf "Each module: repeated INPUT -> transform -> OUTPUT loops (feedback I/O)\n\n")
+  (for ([p (in-range 5 10)])
+    (disasm-module prog (vector-ref prog (+ 10 p)) 12))
+  (printf "\n=== DYNAMIC TRACE — single amp, inputs [phase, signal=0] ===\n")
+  (printf "(Part 1 path: two inputs suffice. Part 2 modules need a signal stream.)\n\n")
+  (for ([p (in-range 10)])
+    (with-handlers ([exn:fail? (lambda (e)
+                                  (printf "phase ~a: blocked after ~a inputs (~a)\n"
+                                          p 2 (exn-message e)))])
+      (define-values (ops outs count) (trace-exec/inputs prog (list p 0)))
+      (printf "phase ~a: ~a instructions, output ~a\n" p count (last outs))
+      (summarize-ops ops)))
+  (printf "\nAffine symbolic pass skipped: phase dispatch + I/O streams.\n"))
+
 ;; ===========================================================================
 
 ;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
@@ -331,6 +418,8 @@
   (printf "Program: ~a cells from ~a\n\n" (vector-length prog) path)
   (define starts (trace-code prog))
   (cond
+    [(day7-amplifier? path prog)
+     (run-day7-disasm prog)]
     [(day2-era? starts prog)
      ;; Branchless Day 2 code: linear sweep + affine proof.
      (disassemble prog)
