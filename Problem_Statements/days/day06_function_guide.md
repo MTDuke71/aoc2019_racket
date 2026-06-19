@@ -105,6 +105,61 @@ Two canonical facts to bank:
 
 ---
 
+## The real input's shape: an anti-arborescence, mostly vine
+
+Terminology first, then measurement. A directed tree has two
+orientations, and they have different names in the literature: edges
+pointing *away* from the root form an **arborescence** (out-tree); edges
+pointing *toward* the root form an **anti-arborescence** (in-tree). The
+parent-pointer hash stores the anti-arborescence orientation — each
+entry is an edge child → parent, aimed at `COM`. That's not an
+implementation accident: both of the day's queries (depth, LCA) only
+ever travel *toward* the root, so the in-tree is the orientation that
+makes every traversal a plain pointer-walk. Storing the out-tree
+instead (parent → list of children, what you'd want for BFS from the
+root) would force Part 2 into an actual search. Representation follows
+query direction.
+
+So much for the abstract shape — what does the *actual* input look
+like? A few minutes with a script over `inputs/day06.txt`:
+
+| Property | Measured |
+|----------|----------|
+| nodes | 896 |
+| edges | 895 — exactly n − 1, the tree signature |
+| roots (nodes with no parent) | 1 (`COM`) |
+| nodes with two parents | 0 |
+| max depth | **359** |
+| leaves | 68 |
+| internal nodes with 1 child | 761 |
+| internal nodes with 2 children | 67 (none with three or more) |
+| max width (nodes at any one depth) | 7 |
+| sum of all depths | 140608 (= the Part 1 answer) |
+
+The first four rows *verify* the tree claim — the puzzle's "exactly one"
+promise, checked rather than trusted. The rest say the tree is a
+**vine**: a balanced binary tree on 896 nodes would be ~10 deep, and
+this one is 359 deep — 85% of the internal nodes have exactly one
+child, so the map is a handful of long tendrils that fork (always
+two-way) only occasionally and never get wider than 7 nodes at a depth.
+Thematically that's exactly right for an orbit map: real orbital
+hierarchies are chains (moon → planet → star), not bushy fans.
+
+The shape feeds back into the analysis above in two places:
+
+- **Part 1's O(n·d) is honest work here.** With average depth
+  140608 / 895 ≈ **157**, the naive depth-sum really does ~140k
+  pointer-hops — `d` is in the hundreds, nowhere near the log n of a
+  balanced tree. That's the entire Part 1 benchmark line below, and
+  it's why the memoized sidebar's O(n) would be a real (if
+  unnecessary) ~150× hop reduction.
+- **Part 2 stays trivially cheap.** `YOU` sits at depth 343, `SAN` at
+  116, so the two chain walks touch a few hundred nodes total — the
+  vine's depth costs Part 1 but not the single LCA query, and it's
+  another reason binary lifting would be machinery without a customer.
+
+---
+
 ## The Day 6 code, form by form
 
 ### `parse-input` — `for/hash` builds the parent map
@@ -331,10 +386,10 @@ The mean is over **500** iterations. What the row says:
 
 - **Parse** builds a ~900-entry immutable hash from ~900 line splits —
   comfortably sub-millisecond.
-- **Part 1** dominates the day: ~900 ancestor walks of average depth in
-  the tens, each consing and reversing a fresh chain list. This is the
-  O(n·d) cost made visible — and exactly the line the memoized sidebar
-  would erase.
+- **Part 1** dominates the day: ~900 ancestor walks of average depth
+  ~157 (the vine shape measured above — max depth 359), each consing
+  and reversing a fresh chain list. This is the O(n·d) cost made
+  visible — and exactly the line the memoized sidebar would erase.
 - **Part 2** walks just *two* chains and builds one small hash —
   microseconds. The asymmetry between the parts is the depth-sum vs.
   single-query asymmetry, on display in the timings.
