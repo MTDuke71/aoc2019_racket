@@ -21,7 +21,8 @@
          (prefix-in d04:  "../src/day04.rkt")
          (prefix-in d05:  "../src/day05.rkt")
          (prefix-in d06:  "../src/day06.rkt")
-         (prefix-in d07:  "../src/day07.rkt"))
+         (prefix-in d07:  "../src/day07.rkt")
+         (prefix-in d08:  "../src/day08.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -76,6 +77,15 @@
 ;; cooperative VMs per permutation — low tens of ms total — 200 iters is plenty.
 (bench-day "07" (read-day-input 7) d07:parse-input d07:part1 d07:part2
            #:iters 200)
+;; Day 8's parts take explicit (digits width height); wrap them at the
+;; puzzle's 25×6 so the harness sees the standard one-arg shape. Parse
+;; builds a 15000-byte vector; Part 1 chunks 100 layers and histograms;
+;; Part 2 resolves 150 pixels down ≤100 layers — all sub-millisecond, so
+;; 2000 iterations gives a stable mean.
+(bench-day "08" (read-day-input 8) d08:parse-input
+           (lambda (d) (d08:part1 d 25 6))
+           (lambda (d) (d08:part2 d 25 6))
+           #:iters 2000)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
