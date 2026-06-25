@@ -22,7 +22,8 @@
          (prefix-in d05:  "../src/day05.rkt")
          (prefix-in d06:  "../src/day06.rkt")
          (prefix-in d07:  "../src/day07.rkt")
-         (prefix-in d08:  "../src/day08.rkt"))
+         (prefix-in d08:  "../src/day08.rkt")
+         (prefix-in d09:  "../src/day09.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -86,6 +87,11 @@
            (lambda (d) (d08:part1 d 25 6))
            (lambda (d) (d08:part2 d 25 6))
            #:iters 2000)
+;; Day 9 runs the BOOST program once per part — a few thousand instructions
+;; against the grow-on-write memory, low single-digit ms — so 500 iterations
+;; gives a stable mean without dominating the bench run.
+(bench-day "09" (read-day-input 9) d09:parse-input d09:part1 d09:part2
+           #:iters 500)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
