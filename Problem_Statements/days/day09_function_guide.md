@@ -317,6 +317,11 @@ The mean is over **500** iterations, and the row tells a striking story —
   difference is which code path that one input selects, and the boost path is
   a genuinely heavy computation (the "problem within the problem" — BOOST is
   hiding a real algorithm we never have to understand, only execute).
+  [day09_disassembly.md](day09_disassembly.md) takes the program apart and
+  identifies that algorithm: a naive tree recursion `T(n)=T(n-1)+T(n-3)` at
+  `n=27`, run on a **stack frame addressed through the relative base** — the
+  relative mode this day adds turns out to be a *calling convention*, and
+  Part 2's cost is 37,119 unmemoized recursive calls.
 
 There's no interpreter change that helps here — the cost is "interpret N
 instructions," linear in the trace length, and Part 2's trace is simply huge.

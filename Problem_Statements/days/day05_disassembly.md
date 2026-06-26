@@ -268,7 +268,10 @@ with two additions the later days force:
 - **Relative mode + relative base (Day 9).** A third parameter mode (`2`)
   and a movable base register join `param-mode`; the decoder gains a
   `rel[k]` operand rendering and the executor a `base` accumulator. The
-  histogram-and-trace structure is unchanged.
+  histogram-and-trace structure is unchanged. Done in
+  [day09_disassembly.md](day09_disassembly.md), where — unlike here — static
+  recursive descent *succeeds* (BOOST isn't self-modifying), and the relative
+  base turns out to be a **stack frame pointer** driving a recursive subroutine.
 
 What does *not* generalize is the affine symbolic proof from
 [Day 2](day02_disassembly.md): the moment a program branches on a

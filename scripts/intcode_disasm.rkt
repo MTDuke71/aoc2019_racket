@@ -172,25 +172,34 @@
 ;; ===========================================================================
 
 ;; opcode -> (mnemonic . width), where width counts the opcode cell.
+;; Opcode 9 (adjust relative base) is the Day 9 addition — see run-day9-disasm.
 (define op-table
   (hash 1 '(add . 4) 2 '(mul . 4) 3 '(in . 2) 4 '(out . 2)
-        5 '(jt  . 3) 6 '(jf  . 3) 7 '(lt . 4) 8 '(eq  . 4) 99 '(halt . 1)))
+        5 '(jt  . 3) 6 '(jf  . 3) 7 '(lt . 4) 8 '(eq  . 4)
+        9 '(arb . 2) 99 '(halt . 1)))
 
 ;; Parameter mode of the nth (1-based) parameter of instruction word `instr`:
-;; the nth digit above the two-digit opcode. 0 = position, 1 = immediate.
+;; the nth digit above the two-digit opcode.
+;;   0 = position, 1 = immediate, 2 = relative (Day 9).
 (define (param-mode instr n)
   (modulo (quotient instr (* 100 (expt 10 (sub1 n)))) 10))
 
-;; Render a READ operand (mode-aware): #k for immediate, mem[k] for position.
+;; Render a READ operand (mode-aware): #k immediate, mem[k] position,
+;; rel[k] relative (= mem[rb + k], rb the movable relative base — Day 9).
 (define (render-read prog ip n)
   (define raw (vector-ref prog (+ ip n)))
-  (if (= 1 (param-mode (vector-ref prog ip) n))
-      (format "#~a" raw)
-      (format "mem[~a]" raw)))
+  (case (param-mode (vector-ref prog ip) n)
+    [(1) (format "#~a" raw)]
+    [(2) (format "rel[~a]" raw)]
+    [else (format "mem[~a]" raw)]))
 
-;; Render a WRITE operand — always position mode by spec.
+;; Render a WRITE operand — position by default, rel[k] under relative mode.
+;; Never immediate (you cannot store into a literal).
 (define (render-write prog ip n)
-  (format "mem[~a]" (vector-ref prog (+ ip n))))
+  (define raw (vector-ref prog (+ ip n)))
+  (if (= 2 (param-mode (vector-ref prog ip) n))
+      (format "rel[~a]" raw)
+      (format "mem[~a]" raw)))
 
 ;; Decode one instruction at ip: return (values text width successors).
 ;; `successors` are the addresses control can flow to next. For jumps we
@@ -214,6 +223,7 @@
        [(6)  (values (format "if ~a == 0 jump ~a" (R 1) (R 2))  3 (jump-succs prog ip))]
        [(7)  (values (format "~a = (~a < ~a)"  (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
        [(8)  (values (format "~a = (~a == ~a)" (W 3) (R 1) (R 2)) 4 (list (+ ip 4)))]
+       [(9)  (values (format "REL_BASE += ~a" (R 1))            2 (list (+ ip 2)))]
        [(99) (values "HALT" 1 '())])]))
 
 (define (jump-succs prog ip)
@@ -271,7 +281,8 @@
 
 (define op-name (hash 1 "add" 2 "mul" 3 "in" 4 "out"
                       5 "jump-if-true" 6 "jump-if-false"
-                      7 "less-than" 8 "equals" 99 "halt"))
+                      7 "less-than" 8 "equals"
+                      9 "adjust-rel-base" 99 "halt"))
 
 (define (summarize-ops ops)
   (printf "\n=== REACHABLE-CODE OPCODE HISTOGRAM ===\n")
@@ -402,6 +413,119 @@
   (printf "\nAffine symbolic pass skipped: phase dispatch + I/O streams.\n"))
 
 ;; ===========================================================================
+;; DAY 9 ERA — relative mode (param-mode 2) + a movable relative base (op 9)
+;; ===========================================================================
+
+;; Dynamic trace with a relative base register and grow-on-write memory.
+;; Returns (values opcode-counts outputs instruction-count rel-reads rel-writes),
+;; where the rel-* tallies count how many operands resolved through mode 2 —
+;; the proof that the BOOST program actually exercises relative addressing.
+(define (trace-exec/rel prog inputs #:limit [limit 100000000])
+  (define mem (d05:intcode-mem prog))
+  (define rel-reads  (box 0))
+  (define rel-writes (box 0))
+  (define (val ip rb n)
+    (define raw (d05:intcode-ref mem (+ ip n)))
+    (case (param-mode (d05:intcode-ref mem ip) n)
+      [(1) raw]                                         ; immediate
+      [(2) (set-box! rel-reads (add1 (unbox rel-reads)))
+           (d05:intcode-ref mem (+ rb raw))]            ; relative
+      [else (d05:intcode-ref mem raw)]))                ; position
+  (define (addr ip rb n)
+    (define raw (d05:intcode-ref mem (+ ip n)))
+    (cond [(= 2 (param-mode (d05:intcode-ref mem ip) n))
+           (set-box! rel-writes (add1 (unbox rel-writes)))
+           (+ rb raw)]
+          [else raw]))
+  (define counts (make-hash))
+  (let loop ([ip 0] [rb 0] [pending inputs] [count 0])
+    (when (> count limit) (error 'trace-exec/rel "instruction limit exceeded"))
+    (define op (modulo (d05:intcode-ref mem ip) 100))
+    (hash-update! counts op add1 0)
+    (define c (add1 count))
+    (case op
+      [(1)  (d05:intcode-set! mem (addr ip rb 3) (+ (val ip rb 1) (val ip rb 2))) (loop (+ ip 4) rb pending c)]
+      [(2)  (d05:intcode-set! mem (addr ip rb 3) (* (val ip rb 1) (val ip rb 2))) (loop (+ ip 4) rb pending c)]
+      [(3)  (unless (pair? pending) (error 'trace-exec/rel "input exhausted at ~a" ip))
+            (d05:intcode-set! mem (addr ip rb 1) (car pending)) (loop (+ ip 2) rb (cdr pending) c)]
+      [(4)  (loop (+ ip 2) rb pending c)]   ; output value captured by caller via re-run if needed
+      [(5)  (loop (if (not (zero? (val ip rb 1))) (val ip rb 2) (+ ip 3)) rb pending c)]
+      [(6)  (loop (if (zero? (val ip rb 1))       (val ip rb 2) (+ ip 3)) rb pending c)]
+      [(7)  (d05:intcode-set! mem (addr ip rb 3) (if (< (val ip rb 1) (val ip rb 2)) 1 0)) (loop (+ ip 4) rb pending c)]
+      [(8)  (d05:intcode-set! mem (addr ip rb 3) (if (= (val ip rb 1) (val ip rb 2)) 1 0)) (loop (+ ip 4) rb pending c)]
+      [(9)  (loop (+ ip 2) (+ rb (val ip rb 1)) pending c)]
+      [(99) (values counts count (unbox rel-reads) (unbox rel-writes))]
+      [else (error 'trace-exec/rel "bad opcode ~a at ~a" op ip)])))
+
+;; Capture BOOST's single output without retaining the whole opcode trace.
+(define (boost-output prog input)
+  (define mem (d05:intcode-mem prog))
+  (define out (box #f))
+  (define (val ip rb n)
+    (define raw (d05:intcode-ref mem (+ ip n)))
+    (case (param-mode (d05:intcode-ref mem ip) n)
+      [(1) raw] [(2) (d05:intcode-ref mem (+ rb raw))] [else (d05:intcode-ref mem raw)]))
+  (define (addr ip rb n)
+    (define raw (d05:intcode-ref mem (+ ip n)))
+    (if (= 2 (param-mode (d05:intcode-ref mem ip) n)) (+ rb raw) raw))
+  (let loop ([ip 0] [rb 0])
+    (define op (modulo (d05:intcode-ref mem ip) 100))
+    (case op
+      [(1)  (d05:intcode-set! mem (addr ip rb 3) (+ (val ip rb 1) (val ip rb 2))) (loop (+ ip 4) rb)]
+      [(2)  (d05:intcode-set! mem (addr ip rb 3) (* (val ip rb 1) (val ip rb 2))) (loop (+ ip 4) rb)]
+      [(3)  (d05:intcode-set! mem (addr ip rb 1) input) (loop (+ ip 2) rb)]
+      [(4)  (set-box! out (val ip rb 1)) (loop (+ ip 2) rb)]
+      [(5)  (loop (if (not (zero? (val ip rb 1))) (val ip rb 2) (+ ip 3)) rb)]
+      [(6)  (loop (if (zero? (val ip rb 1))       (val ip rb 2) (+ ip 3)) rb)]
+      [(7)  (d05:intcode-set! mem (addr ip rb 3) (if (< (val ip rb 1) (val ip rb 2)) 1 0)) (loop (+ ip 4) rb)]
+      [(8)  (d05:intcode-set! mem (addr ip rb 3) (if (= (val ip rb 1) (val ip rb 2)) 1 0)) (loop (+ ip 4) rb)]
+      [(9)  (loop (+ ip 2) (+ rb (val ip rb 1)))]
+      [(99) (unbox out)]
+      [else (error 'boost-output "bad opcode ~a at ~a" op ip)])))
+
+(define (summarize-counts counts total)
+  (printf "~a instructions executed.\n\n" total)
+  (for ([o (in-list (sort (hash-keys counts) <))])
+    (printf "  ~a  ~a (~a)\n"
+            (~a (hash-ref counts o) #:min-width 9 #:align 'right)
+            (hash-ref op-name o "?") o)))
+
+(define (day9-boost? path prog)
+  (define s (if (path? path) (path->string path) path))
+  (or (regexp-match? #rx"day09" s)
+      ;; BOOST signature: a 16-digit-square self-test in the first cells.
+      (and (>= (vector-length prog) 11)
+           (= (vector-ref prog 0) 1102)
+           (= (vector-ref prog 1) (vector-ref prog 2)))))
+
+(define (run-day9-disasm prog)
+  ;; --- Pass 1: static recursive descent over the compliance prologue. ---
+  (define starts (trace-code prog))
+  (define static-ops (disassemble-cfg prog starts))
+  (printf "\nStatic descent decoded ~a instructions covering essentially the\n"
+          (length static-ops))
+  (printf "WHOLE program: unlike Days 5/7, BOOST is NOT self-modifying and its\n")
+  (printf "jumps use static (immediate) targets, so control flow is followable\n")
+  (printf "off the disk. The only operands descent cannot pin down are the\n")
+  (printf "relative-mode jump TARGETS (e.g. `jump rel[0]`), which the linear\n")
+  (printf "fall-through scan of each test block reaches anyway. The head (0..25)\n")
+  (printf "is the compliance self-test; 65..903 is the test battery; 904..970 is\n")
+  (printf "the boost computation.\n")
+  ;; --- Pass 2: dynamic histograms for both diagnostic modes. ---
+  (for ([in (in-list '(1 2))])
+    (define-values (counts count rel-reads rel-writes) (trace-exec/rel prog (list in)))
+    (define out (boost-output prog in))
+    (printf "\n=== DYNAMIC TRACE — input ~a (~a) ===\n"
+            in (if (= in 1) "test mode" "sensor-boost mode"))
+    (summarize-counts counts count)
+    (printf "\n  relative-mode reads  : ~a\n" rel-reads)
+    (printf "  relative-mode writes : ~a\n" rel-writes)
+    (printf "  opcode 9 (adjust base): ~a\n" (hash-ref counts 9 0))
+    (printf "  single output         : ~a\n" out))
+  (printf "\nAffine symbolic pass skipped: BOOST branches on its input and on\n")
+  (printf "data it computes, so its output is not an affine form (Day 2 only).\n"))
+
+;; ===========================================================================
 
 ;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
 (define (day2-era? starts prog)
@@ -418,6 +542,8 @@
   (printf "Program: ~a cells from ~a\n\n" (vector-length prog) path)
   (define starts (trace-code prog))
   (cond
+    [(day9-boost? path prog)
+     (run-day9-disasm prog)]
     [(day7-amplifier? path prog)
      (run-day7-disasm prog)]
     [(day2-era? starts prog)
