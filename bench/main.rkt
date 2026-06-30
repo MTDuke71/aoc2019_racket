@@ -23,7 +23,8 @@
          (prefix-in d06:  "../src/day06.rkt")
          (prefix-in d07:  "../src/day07.rkt")
          (prefix-in d08:  "../src/day08.rkt")
-         (prefix-in d09:  "../src/day09.rkt"))
+         (prefix-in d09:  "../src/day09.rkt")
+         (prefix-in d10:  "../src/day10.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -92,6 +93,12 @@
 ;; gives a stable mean without dominating the bench run.
 (bench-day "09" (read-day-input 9) d09:parse-input d09:part1 d09:part2
            #:iters 500)
+;; Day 10's parts are both O(n²) over ~310 asteroids: each `best` call runs
+;; ~310 set-building visibility scans of ~310 others. Part 2 additionally
+;; groups/sorts/round-robins the winning station's rays. Low tens of ms per
+;; part call, so 100 iterations gives a stable mean.
+(bench-day "10" (read-day-input 10) d10:parse-input d10:part1 d10:part2
+           #:iters 100)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
