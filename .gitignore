@@ -14,3 +14,9 @@ Thumbs.db
 # Tooling / local config
 .claude/
 .obsidian/
+
+#Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
