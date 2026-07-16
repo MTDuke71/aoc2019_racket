@@ -24,7 +24,8 @@
          (prefix-in d07:  "../src/day07.rkt")
          (prefix-in d08:  "../src/day08.rkt")
          (prefix-in d09:  "../src/day09.rkt")
-         (prefix-in d10:  "../src/day10.rkt"))
+         (prefix-in d10:  "../src/day10.rkt")
+         (prefix-in d11:  "../src/day11.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -99,6 +100,14 @@
 ;; part call, so 100 iterations gives a stable mean.
 (bench-day "10" (read-day-input 10) d10:parse-input d10:part1 d10:part2
            #:iters 100)
+
+;; Day 11's parts both single-step the robot's Intcode program to
+;; completion (a few thousand `vm-step!` calls plus hash bookkeeping);
+;; Part 2 additionally walks the painted hash into a rendered string, which
+;; is cheap next to the simulation itself. 200 iterations gives a stable
+;; mean for both.
+(bench-day "11" (read-day-input 11) d11:parse-input d11:part1 d11:part2
+           #:iters 200)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
