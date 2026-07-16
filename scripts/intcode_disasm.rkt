@@ -27,12 +27,22 @@
 ;;   Day 2  — linear sweep + affine symbolic proof
 ;;   Day 5  — recursive descent (shows self-mod limits) + dynamic trace
 ;;   Day 7  — phase dispatch table + module disassembly + per-phase trace
+;;   Day 9  — recursive descent (near-total) + relative-mode dynamic trace
+;;   Day 11 — recursive descent (shows self-mod limits) + an INTERACTIVE
+;;            dynamic trace: unlike every prior day, this program's inputs
+;;            aren't known ahead of time or fixable as a short list — each
+;;            one is a live camera reading that depends on where the
+;;            program's own prior output just moved a hull-painting robot.
+;;            So the trace embeds the same block/resume VM protocol as
+;;            src/day11.rkt and drives it with the real hull-painting loop:
+;;            the disassembly and the solution are the same computation.
 ;;
 ;; Usage:  racket scripts/intcode_disasm.rkt [path-to-input]
 ;;         (defaults to inputs/day02.txt)
 
 (require racket/runtime-path
-         (prefix-in d05: "../src/day05.rkt"))
+         (prefix-in d05: "../src/day05.rkt")
+         (prefix-in d11: "../src/day11.rkt"))
 
 (define-runtime-path here ".")
 
@@ -526,6 +536,155 @@
   (printf "data it computes, so its output is not an affine form (Day 2 only).\n"))
 
 ;; ===========================================================================
+;; DAY 11 ERA — interactive I/O: inputs are a live world, not a fixed list
+;; ===========================================================================
+;;
+;; Days 7's amplifiers and Day 9's BOOST both take inputs that are knowable
+;; before the machine starts (a phase setting; a diagnostic mode ID), so
+;; `trace-exec/inputs` and `trace-exec/rel` can just hand them a list. Day
+;; 11's hull-painting robot breaks that: the input at each opcode 3 is a
+;; camera reading of the panel the robot is CURRENTLY standing on, and where
+;; the robot is standing depends on every (paint, turn) pair the program has
+;; emitted so far. There is no input list to precompute — the only way to
+;; know what the Nth input will be is to have already run the world up to
+;; that point. So this pass doesn't feed the VM a list; it embeds the exact
+;; block/resume protocol `src/day11.rkt`'s `vm-step!` uses (opcode 3 with no
+;; input queued reports `'blocked`; the caller supplies the live camera
+;; reading and resumes) and drives it with the same hull-painting loop
+;; `paint-hull` runs, instrumented to also tally an opcode histogram and
+;; relative-mode read/write counts along the way.
+
+;; Same four fields as src/day11.rkt's `vm` struct (mem is tracked
+;; separately here, as a `d05:intcode-mem` box, matching this script's other
+;; dynamic-trace passes).
+(struct rvm (ip rb inputs halted?) #:mutable)
+
+;; One instruction against LIVE memory `mem`, tallying `counts` (opcode
+;; histogram) and `rel-reads`/`rel-writes` (relative-mode operand counts) as
+;; a side effect. Returns the same four tags as src/day11.rkt's `vm-step!`:
+;; 'blocked / 'ran / `(output ,n) / 'halted. A blocked opcode-3 attempt is
+;; NOT tallied — it isn't a completed instruction, and counting it would
+;; double-count the same opcode once blocked and once resumed.
+(define (rvm-step! machine mem counts rel-reads rel-writes)
+  (if (rvm-halted? machine)
+      'halted
+      (let ()
+        (define ip (rvm-ip machine))
+        (define rb (rvm-rb machine))
+        (define instr (d05:intcode-ref mem ip))
+        (define op (modulo instr 100))
+        (define (val n)
+          (define raw (d05:intcode-ref mem (+ ip n)))
+          (case (param-mode instr n)
+            [(1) raw]
+            [(2) (set-box! rel-reads (add1 (unbox rel-reads)))
+                 (d05:intcode-ref mem (+ rb raw))]
+            [else (d05:intcode-ref mem raw)]))
+        (define (addr n)
+          (define raw (d05:intcode-ref mem (+ ip n)))
+          (cond [(= 2 (param-mode instr n))
+                 (set-box! rel-writes (add1 (unbox rel-writes))) (+ rb raw)]
+                [else raw]))
+        (cond
+          [(and (= op 3) (null? (rvm-inputs machine))) 'blocked]
+          [else
+           (hash-update! counts op add1 0)
+           (case op
+             [(1) (d05:intcode-set! mem (addr 3) (+ (val 1) (val 2)))
+                  (set-rvm-ip! machine (+ ip 4)) 'ran]
+             [(2) (d05:intcode-set! mem (addr 3) (* (val 1) (val 2)))
+                  (set-rvm-ip! machine (+ ip 4)) 'ran]
+             [(3) (d05:intcode-set! mem (addr 1) (car (rvm-inputs machine)))
+                  (set-rvm-inputs! machine (cdr (rvm-inputs machine)))
+                  (set-rvm-ip! machine (+ ip 2)) 'ran]
+             [(4) (set-rvm-ip! machine (+ ip 2)) `(output ,(val 1))]
+             [(5) (set-rvm-ip! machine (if (not (zero? (val 1))) (val 2) (+ ip 3))) 'ran]
+             [(6) (set-rvm-ip! machine (if (zero? (val 1)) (val 2) (+ ip 3))) 'ran]
+             [(7) (d05:intcode-set! mem (addr 3) (if (< (val 1) (val 2)) 1 0))
+                  (set-rvm-ip! machine (+ ip 4)) 'ran]
+             [(8) (d05:intcode-set! mem (addr 3) (if (= (val 1) (val 2)) 1 0))
+                  (set-rvm-ip! machine (+ ip 4)) 'ran]
+             [(9) (set-rvm-rb! machine (+ rb (val 1)))
+                  (set-rvm-ip! machine (+ ip 2)) 'ran]
+             [(99) (set-rvm-halted?! machine #t) 'halted]
+             [else (error 'rvm-step! "bad opcode ~a at ~a" op ip)])]))))
+
+;; Supply `camera` the instant the machine blocks wanting it — not before —
+;; and collect outputs until a (paint, turn) pair completes or it halts
+;; first. Identical shape to src/day11.rkt's `run-to-outputs!`.
+(define (rvm-run-to-outputs! machine mem counts rel-reads rel-writes camera)
+  (let loop ([outs '()])
+    (match (rvm-step! machine mem counts rel-reads rel-writes)
+      ['blocked (set-rvm-inputs! machine (list camera)) (loop outs)]
+      ['ran (loop outs)]
+      [`(output ,n)
+       (define outs* (cons n outs))
+       (if (= 2 (length outs*)) (reverse outs*) (loop outs*))]
+      ['halted (reverse outs)])))
+
+;; Run the hull-painting loop to completion (src/day11.rkt's `paint-hull`,
+;; reimplemented here so it can thread the instrumentation through). Returns
+;; (values panels counts rel-reads rel-writes).
+(define (trace-robot prog start-color)
+  (define mem (d05:intcode-mem prog))
+  (define machine (rvm 0 0 '() #f))
+  (define counts (make-hash))
+  (define rel-reads (box 0))
+  (define rel-writes (box 0))
+  (define dirs (vector (cons 0 -1) (cons 1 0) (cons 0 1) (cons -1 0)))
+  (define (turn dir signal) (modulo (+ dir (if (zero? signal) 3 1)) 4))
+  (define start (cons 0 0))
+  (let loop ([pos start] [dir 0] [panels (hash)])
+    (define default (if (equal? pos start) start-color 0))
+    (define camera (hash-ref panels pos default))
+    (define outs (rvm-run-to-outputs! machine mem counts rel-reads rel-writes camera))
+    (cond
+      [(< (length outs) 2) (values panels counts (unbox rel-reads) (unbox rel-writes))]
+      [else
+       (define panels* (hash-set panels pos (car outs)))
+       (define dir* (turn dir (cadr outs)))
+       (define d (vector-ref dirs dir*))
+       (define pos* (cons (+ (car pos) (car d)) (+ (cdr pos) (cdr d))))
+       (loop pos* dir* panels*)])))
+
+(define (day11-robot? path)
+  (define s (if (path? path) (path->string path) path))
+  (regexp-match? #rx"day11" s))
+
+(define (run-day11-disasm prog)
+  ;; --- Pass 1: static recursive descent — same as the Day 5+ fallback,
+  ;; run here explicitly so its self-modification limit is on the record. ---
+  (define starts (trace-code prog))
+  (define static-ops (disassemble-cfg prog starts))
+  (printf "\nStatic descent decoded only ~a instruction(s) before control\n"
+          (length static-ops))
+  (printf "flowed into a cell modified at runtime: this program is\n")
+  (printf "SELF-MODIFYING, same as Days 5/7. But unlike Days 5/7/9, a FIXED\n")
+  (printf "dummy input list can't stand in for a dynamic trace either: every\n")
+  (printf "input this program reads is a live camera reading, dependent on\n")
+  (printf "where its own prior output has already moved a hull-painting\n")
+  (printf "robot. So the passes below drive the SAME interactive world\n")
+  (printf "src/day11.rkt's `paint-hull` does — the trace and the solve are\n")
+  (printf "one computation, run once here for both purposes at once.\n")
+  ;; --- Pass 2: the real hull-painting loop, once per part, instrumented. ---
+  (for ([start-color (in-list '(0 1))])
+    (define-values (panels counts rel-reads rel-writes) (trace-robot prog start-color))
+    (define total (for/sum ([v (in-hash-values counts)]) v))
+    (printf "\n=== DYNAMIC TRACE — start-color ~a (Part ~a) ===\n"
+            start-color (if (zero? start-color) 1 2))
+    (summarize-counts counts total)
+    (printf "\n  relative-mode reads   : ~a\n" rel-reads)
+    (printf "  relative-mode writes  : ~a\n" rel-writes)
+    (printf "  opcode 9 (adjust base): ~a\n" (hash-ref counts 9 0))
+    (printf "  panels painted        : ~a\n" (hash-count panels))
+    (when (= start-color 1)
+      (printf "  rendered registration code:\n")
+      (for ([line (in-list (string-split (d11:render panels) "\n"))])
+        (printf "    ~a\n" line))))
+  (printf "\nAffine symbolic pass skipped: this program branches on live\n")
+  (printf "camera input, so its output is not an affine form (Day 2 only).\n"))
+
+;; ===========================================================================
 
 ;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
 (define (day2-era? starts prog)
@@ -546,6 +705,8 @@
      (run-day9-disasm prog)]
     [(day7-amplifier? path prog)
      (run-day7-disasm prog)]
+    [(day11-robot? path)
+     (run-day11-disasm prog)]
     [(day2-era? starts prog)
      ;; Branchless Day 2 code: linear sweep + affine proof.
      (disassemble prog)
