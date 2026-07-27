@@ -25,7 +25,8 @@
          (prefix-in d08:  "../src/day08.rkt")
          (prefix-in d09:  "../src/day09.rkt")
          (prefix-in d10:  "../src/day10.rkt")
-         (prefix-in d11:  "../src/day11.rkt"))
+         (prefix-in d11:  "../src/day11.rkt")
+         (prefix-in d12:  "../src/day12.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -108,6 +109,13 @@
 ;; mean for both.
 (bench-day "11" (read-day-input 11) d11:parse-input d11:part1 d11:part2
            #:iters 200)
+
+;; Day 12's Part 1 is 3 axes × 1000 steps of four-element list arithmetic —
+;; a few thousand cheap steps. Part 2 is the same kernel run until each axis
+;; returns to its start: 22958 + 286332 + 231614 ≈ 541k steps, ~90 ms per
+;; call, so 50 iterations keeps the mean stable without minutes of bench.
+(bench-day "12" (read-day-input 12) d12:parse-input d12:part1 d12:part2
+           #:iters 50)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
