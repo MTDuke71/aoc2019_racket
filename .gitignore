@@ -1,6 +1,13 @@
 inputs/*.txt
 reference/
 
+# Full annotated listings (scripts/intcode_disasm.rkt --full). Every cell of
+# the program appears verbatim, so committing one would republish a puzzle
+# input that inputs/*.txt above deliberately keeps out of the repo. Generate
+# locally instead:
+#   racket scripts/intcode_disasm.rkt inputs/dayNN.txt --full > Problem_Statements/days/dayNN_listing.md
+Problem_Statements/days/*_listing.md
+
 # Racket build artifacts
 compiled/
 *.zo

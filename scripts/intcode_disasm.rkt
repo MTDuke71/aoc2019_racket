@@ -976,6 +976,366 @@
   (printf "joystick, so its output is not an affine form (Day 2 only).\n"))
 
 ;; ===========================================================================
+;; DAY 13 — the complete annotated listing (`--full`)
+;; ===========================================================================
+;;
+;; Every cell of the image on a line of its own (or, for the two 1,000-cell
+;; arrays, in an addressed 2-D grid), with three things the plain listing
+;; doesn't have:
+;;
+;;   * SYMBOLS. The globals at 379..392 were named by the disassembly, so
+;;     `mem[382]` prints as `cur_x` and `mem[388]` as `ball_x`. Relative
+;;     operands are named by the frame of the routine they appear in, so
+;;     `rel[-2]` is `x` inside `draw` and `n` inside `mod`.
+;;   * LABELS. Jump targets get names (`col_loop`, `probe_diag`, `break_block`)
+;;     with an auto-generated `L####` for the ones not worth naming.
+;;   * COMMENTS. Hand annotations, keyed by address, carrying what the
+;;     disassembly worked out.
+;;
+;; Keyed by address rather than by content, which is what makes it portable
+;; across users' inputs: the generator randomises instruction ENCODINGS but
+;; never their addresses (see "What changes between users' inputs").
+
+(define d13-global-names
+  (hash 379 "zero" 380 "one" 381 "cmp" 382 "cur_x" 383 "cur_y" 384 "stick"
+        385 "free_play" 386 "score" 387 "blocks" 388 "ball_x" 389 "ball_y"
+        390 "ball_dx" 391 "ball_dy" 392 "paddle_x"))
+
+;; The three cells written at runtime to synthesise indexed addressing. Found
+;; structurally (they are the destination operands of the instructions that
+;; patch them) so this holds on any input.
+(define (d13-patch-cells prog)
+  (hash (vector-ref prog 432) "@score_src"    ; operand of the score add at 433
+        (vector-ref prog 562) "@draw_dst"     ; operand of the store  at 563
+        (vector-ref prog 591) "@load_src"))   ; operand of the load   at 592
+
+;; Frame slot names per routine. A callee shifts the base by its frame size, so
+;; the caller's `rel[0]`(return address) and `rel[1..k]`(arguments) become
+;; `rel[-F]` and `rel[-F+1 ..]`. Outgoing slots (rel[0] and up) are always the
+;; next call's frame.
+;; Ranges are split at each `REL_BASE += -F` epilogue: once the base is
+;; restored, `rel[0]` is the CALLER's return slot again, not this routine's
+;; outgoing one.
+(define d13-frames
+  (list (list 0   392 (hash 0 "ret" 1 "arg1" 2 "arg2" 3 "arg3" 4 "arg4"))
+        (list 393 450 (hash -3 "ret" -2 "x" -1 "y"
+                            0 "ret'" 1 "arg1" 2 "arg2" 3 "arg3" 4 "arg4"))
+        (list 451 455 (hash 0 "ret"))
+        (list 456 543 (hash -8 "ret" -7 "n" -6 "a" -5 "c" -4 "m"
+                            -3 "acc" -2 "step" -1 "tmp"))
+        (list 544 548 (hash 0 "ret"))
+        (list 549 572 (hash -4 "ret" -3 "x" -2 "y" -1 "tile"))
+        (list 573 577 (hash 0 "ret"))
+        (list 578 595 (hash -3 "ret" -2 "x" -1 "y"))
+        (list 596 600 (hash 0 "ret"))
+        (list 601 633 (hash -3 "ret" -2 "x" -1 "y"
+                            0 "ret'" 1 "arg1" 2 "arg2" 3 "arg3" 4 "arg4"))
+        (list 634 638 (hash 0 "ret"))))
+
+(define (d13-frame-name ip k)
+  (define entry (for/first ([f (in-list d13-frames)]
+                            #:when (and (>= ip (first f)) (<= ip (second f))))
+                  (third f)))
+  (define name (and entry (hash-ref entry k #f)))
+  (if name name (format "rel[~a]" k)))
+
+(define d13-label-names
+  (hash 0 "entry" 12 "init" 18 "row_loop" 22 "col_loop" 68 "halt_demo"
+        69 "tick" 75 "read_stick" 94 "try_left" 108 "try_right"
+        119 "move_paddle" 138 "paddle_apply" 161 "collide" 165 "probe_x"
+        205 "bounce_x" 213 "probe_y" 253 "bounce_y" 264 "probe_diag"
+        304 "bounce_diag" 319 "move_ball" 365 "lose_check" 372 "game_over"
+        393 "break_block" 456 "mod" 549 "draw" 578 "tile_at" 601 "slot"))
+
+;; Every statically known jump target gets a label; the unnamed ones get L####.
+(define (d13-labels prog starts)
+  (define labels (make-hash))
+  (for ([(ip _) (in-hash starts)] #:when (< ip 639))
+    (define op (modulo (vector-ref prog ip) 100))
+    (when (and (memv op '(5 6)) (= 1 (param-mode (vector-ref prog ip) 2)))
+      (define t (vector-ref prog (+ ip 2)))
+      (when (< t 639) (hash-set! labels t (hash-ref d13-label-names t #f)))))
+  (for ([(a n) (in-hash d13-label-names)]) (hash-set! labels a n))
+  (for/hash ([(a n) (in-hash labels)])
+    (values a (or n (format "L~a" (~a a #:min-width 4 #:align 'right #:pad-string "0"))))))
+
+(define d13-comments
+  (hash
+   0 "free_play = one + zero = 1. Poking address 0 to 2 rewrites this ADD into a MUL, giving one*zero = 0 -- 'insert quarters' is an opcode patch, not a flag"
+   4 "tamper canary: the last cell of the image must still hold its nonce"
+   8 "canary ok -> run"
+   11 "canary failed: HALT having emitted nothing at all (a parser self-test)"
+   12 "relative base -> one past the image; everything above is heap/stack"
+   30 "return address for the call below"
+   34 "call tile_at(cur_x, cur_y)"
+   37 "the opening repaint writes the wire DIRECTLY..."
+   41 "...not through draw(). Two display paths; this one only reads the array"
+   47 "screen width"
+   51 "next column"
+   58 "screen height"
+   62 "next row"
+   65 "free play -> play the game; otherwise the board was the whole show"
+   68 "demo mode HALT -- this is where a Part 1 run ends"
+   69 "publish the score: the out-of-band (-1, 0, value) triple"
+   75 "THE joystick read: the only opcode 3 in the program"
+   81 "stick < 0 -> try to move left"
+   88 "stick > 0 -> try to move right"
+   91 "stick == 0: no paddle move this tick"
+   94 "left clamp: paddle_x must be > 1 (column 0 is wall)"
+   98 "against the wall -> skip the move entirely"
+   108 "right clamp: paddle_x < W-2"
+   119 "arg1 = the paddle's CURRENT column"
+   123 "arg2 = paddle row (H-2)"
+   127 "arg3 = EMPTY"
+   135 "call draw(paddle_x, row, EMPTY) -- erase the paddle"
+   138 "paddle_x += stick"
+   158 "call draw(paddle_x, row, PADDLE) -- redraw it one cell over"
+   161 "collide: `stick` is reused as the did-we-bounce flag, its live range over"
+   165 "arg1 = ball_x + ball_dx"
+   177 "call tile_at(ball_x+dx, ball_y) -- PROBE 1, horizontal"
+   180 "empty -> nothing on this axis"
+   183 "is it a block?"
+   187 "not a block (wall or paddle) -> bounce without scoring"
+   202 "call break_block(ball_x+dx, ball_y)"
+   205 "reflect: ball_dx = -ball_dx"
+   225 "call tile_at(ball_x, ball_y+dy) -- PROBE 2, vertical"
+   250 "call break_block(ball_x, ball_y+dy)"
+   253 "reflect: ball_dy = -ball_dy"
+   261 "bounced? -> re-run every probe from scratch. This fixed point has NO iteration bound: with both x-neighbours solid it never converges (the livelock)"
+   276 "call tile_at(ball_x+dx, ball_y+dy) -- PROBE 3, diagonal"
+   301 "call break_block on the diagonal cell"
+   304 "corner hit: BOTH components reflect -- this is the one bit of steering a paddle has"
+   316 "bounced? -> re-probe"
+   335 "call draw(ball_x, ball_y, EMPTY) -- erase the ball"
+   362 "call draw(ball_x, ball_y, BALL) -- redraw it"
+   365 "lose line: is the ball still above row H-1?"
+   369 "alive -> next tick"
+   372 "GAME OVER: the score sentinel carrying 0. A missed ball reports nothing, not a partial score"
+   378 "HALT"
+   393 "break_block(x, y) -- frame 3"
+   411 "call draw(x, y, EMPTY) -- erase the block"
+   426 "call slot(x, y) -- address of this cell's point value"
+   429 "PATCH: write that address into the operand cell of the add below"
+   433 "score += mem[<patched>]. Intcode has no double indirection, so an indexed load is synthesised by rewriting the instruction"
+   437 "publish the new score"
+   447 "any left -> return"
+   450 "board clear: HALT. A winning run ends HERE, mid-frame, without unwinding"
+   453 "ret"
+   456 "mod(n, a, c, m) -> (n*a + c) mod m. Frame 8 = ret + 4 args + 3 locals"
+   470 "skip the ladder if acc is already below it"
+   481 "acc -= 64m, repeatedly"
+   492 "step = 8m"
+   518 "step = m. Three octal ladders: acc < 512m always, so no fourth is needed"
+   540 "return the remainder in the arg1 slot"
+   546 "ret"
+   549 "draw(x, y, tile) -- frame 4"
+   551 "addr = y * stride"
+   555 "addr += x"
+   559 "addr += array base. The result lands in the DESTINATION operand of the store below"
+   563 "screen[addr] = tile, via that patched operand"
+   567 "and mirror the write to the output port -- the display is memory-mapped, so every store is a draw command on the wire"
+   575 "ret"
+   578 "tile_at(x, y) -- frame 3"
+   588 "same address arithmetic, but into the SOURCE operand of the load below"
+   592 "return screen[addr] in the arg1 slot"
+   598 "ret"
+   601 "slot(x, y) -- frame 3. Address of (x,y)'s point value"
+   603 "n = H*x ... COLUMN-major, while the screen array is row-major"
+   607 "... + y"
+   611 "multiplier (coprime to the modulus, so the map is a bijection)"
+   615 "addend"
+   619 "modulus = W*H"
+   627 "call mod(n, a, c, m)"
+   630 "+ the point-value array base"
+   636 "ret"))
+
+;; Symbol-substituting operand rendering.
+;;
+;; The important subtlety is the SELF-MODIFIED operands. If the cell holding
+;; this operand is one the program patches at runtime, its on-disk value is
+;; meaningless — the instruction really addresses whatever was written there.
+;; So `mem[0]` at 0563 (cell 566 on disk holds 0) prints as `mem[@draw_dst]`:
+;; "the cell whose address is in @draw_dst". That is Intcode's missing indexed
+;; addressing mode, spelled out.
+(define (d13-operand prog names ip n mode)
+  (define raw (vector-ref prog (+ ip n)))
+  (define patched (hash-ref names (+ ip n) #f))
+  (cond
+    [(and patched (memv mode '(0))) (format "mem[~a]" patched)]
+    [(= mode 1) (format "#~a" raw)]
+    [(= mode 2) (d13-frame-name ip raw)]
+    [else (hash-ref names raw (lambda () (format "mem[~a]" raw)))]))
+
+(define (d13-sym-read prog names ip n)
+  (d13-operand prog names ip n (param-mode (vector-ref prog ip) n)))
+
+(define (d13-sym-write prog names ip n)
+  (define mode (param-mode (vector-ref prog ip) n))
+  (d13-operand prog names ip n (if (= mode 2) 2 0)))
+
+;; One instruction, symbolically. Returns (values text width).
+(define (d13-sym-decode prog names labels ip)
+  (define instr (vector-ref prog ip))
+  (define op (modulo instr 100))
+  (define (R n) (d13-sym-read prog names ip n))
+  (define (W n) (d13-sym-write prog names ip n))
+  (define (target n)
+    (if (= 1 (param-mode instr n))
+        (hash-ref labels (vector-ref prog (+ ip n))
+                  (lambda () (format "~a" (vector-ref prog (+ ip n)))))
+        (R n)))
+  ;; `x = x + #1` reads better as `x += 1`, and the program is full of them.
+  (define (accum sym)
+    (and (memv (param-mode instr 3) '(0 2))
+         (equal? (W 3) (R 1))
+         (= 1 (param-mode instr 2))
+         (format "~a ~a= ~a" (W 3) sym (vector-ref prog (+ ip 2)))))
+  ;; The generator has no `li` or `mov`, so it synthesises them out of add and
+  ;; multiply against an identity element — `add #0,#k`, `mul #k,#1` and their
+  ;; mirrors. Fold those back: two immediates become the constant they compute,
+  ;; and an identity operand becomes a plain assignment. The raw words are in
+  ;; the column to the left, so nothing is hidden.
+  (define (fold identity)
+    (define (imm? n) (= 1 (param-mode instr n)))
+    (define (arg n) (vector-ref prog (+ ip n)))
+    (cond
+      [(and (imm? 1) (imm? 2))
+       (format "~a = ~a" (W 3) (if (= op 2) (* (arg 1) (arg 2)) (+ (arg 1) (arg 2))))]
+      [(and (imm? 1) (= (arg 1) identity)) (format "~a = ~a" (W 3) (R 2))]
+      [(and (imm? 2) (= (arg 2) identity)) (format "~a = ~a" (W 3) (R 1))]
+      [else #f]))
+  (case op
+    [(1)  (values (or (accum "+") (fold 0) (format "~a = ~a + ~a" (W 3) (R 1) (R 2))) 4)]
+    [(2)  (values (or (accum "*") (fold 1) (format "~a = ~a * ~a" (W 3) (R 1) (R 2))) 4)]
+    [(3)  (values (format "~a = INPUT" (W 1)) 2)]
+    [(4)  (values (format "OUT ~a" (R 1)) 2)]
+    [(5)  (values (if (equal? (R 1) "#1")
+                      (format "jump ~a" (target 2))
+                      (format "if ~a != 0 jump ~a" (R 1) (target 2))) 3)]
+    [(6)  (values (if (equal? (R 1) "#0")
+                      (format "jump ~a" (target 2))
+                      (format "if ~a == 0 jump ~a" (R 1) (target 2))) 3)]
+    [(7)  (values (format "~a = (~a < ~a)" (W 3) (R 1) (R 2)) 4)]
+    [(8)  (values (format "~a = (~a == ~a)" (W 3) (R 1) (R 2)) 4)]
+    [(9)  (values (format "REL_BASE += ~a" (R 1)) 2)]
+    [(99) (values "HALT" 1)]
+    [else (values (format "??? ~a" instr) 1)]))
+
+(define (d13-grid prog from count width per-row cell-width)
+  (for ([row (in-range (quotient (+ count (sub1 per-row)) per-row))])
+    (define start (+ from (* row per-row)))
+    (define cells
+      (for/list ([i (in-range per-row)]
+                 #:when (< (+ start i) (+ from count)))
+        (~a (vector-ref prog (+ start i))
+            #:min-width cell-width #:align 'right)))
+    (printf "~a  ~a\n"
+            (~a start #:min-width 4 #:align 'right #:pad-string "0")
+            (string-join cells " "))))
+
+(define (run-day13-full prog path)
+  (define starts (trace-code prog))
+  (define labels (d13-labels prog starts))
+  (define names
+    (for/fold ([h d13-global-names]) ([(cell nm) (in-hash (d13-patch-cells prog))])
+      (hash-set h cell nm)))
+  (define W (d13-W prog)) (define H (d13-H prog))
+  (define base (d13-base prog)) (define tbase (d13-tbase prog))
+  (define n (vector-length prog))
+  (define glyph (hash 0 #\. 1 #\# 2 #\o 3 #\= 4 #\*))
+  (define src
+    (let-values ([(_dir fname _root)
+                  (split-path (if (path? path) path (string->path path)))])
+      (path->string fname)))
+  (printf "# Day 13 — the complete annotated listing (`~a`)\n\n" src)
+  (printf "> All ~a integers of `inputs/~a`, every one accounted for:\n" n src)
+  (printf "> ~a cells of code disassembled with symbols, labels and comments,\n" base)
+  (printf "> then the data regions as addressed 2-D grids. Generated by\n")
+  (printf "> [scripts/intcode_disasm.rkt](../../scripts/intcode_disasm.rkt) —\n")
+  (printf "> `racket scripts/intcode_disasm.rkt inputs/~a --full`.\n" src)
+  (printf ">\n> The analysis behind the comments is in\n")
+  (printf "> [day13_disassembly.md](day13_disassembly.md); this file is the\n")
+  (printf "> evidence for it, in address order.\n\n")
+  (printf "## Symbols\n\n")
+  (printf "| cell | name | role |\n|---|---|---|\n")
+  (for ([spec (in-list '((379 "zero" "constant 0 — operand of the instruction at 0000")
+                         (380 "one" "constant 1 — the other operand")
+                         (381 "cmp" "every comparison in the program lands here")
+                         (382 "cur_x" "repaint cursor x")
+                         (383 "cur_y" "repaint cursor y")
+                         (384 "stick" "joystick reading, then the bounce flag")
+                         (385 "free_play" "0 = play, 1 = draw the board and halt")
+                         (386 "score" "")
+                         (387 "blocks" "blocks remaining; the halt counter")
+                         (388 "ball_x" "") (389 "ball_y" "")
+                         (390 "ball_dx" "±1, never 0") (391 "ball_dy" "±1, never 0")
+                         (392 "paddle_x" "")))])
+    (printf "| ~a | `~a` | ~a |\n" (first spec) (second spec) (third spec)))
+  (for ([(cell nm) (in-hash (d13-patch-cells prog))])
+    (printf "| ~a | `~a` | self-modified operand cell — synthesised indexed addressing |\n"
+            cell nm))
+  (printf "\n## ~a .. ~a — code\n\n```\n"
+          (~a 0 #:min-width 4 #:align 'right #:pad-string "0")
+          (~a (sub1 base) #:min-width 4 #:align 'right #:pad-string "0"))
+  (let loop ([ip 0])
+    (when (< ip base)
+      (cond
+        [(hash-has-key? starts ip)
+         (when (hash-has-key? labels ip)
+           (printf "\n~a:\n" (hash-ref labels ip)))
+         (define-values (text width) (d13-sym-decode prog names labels ip))
+         (define raw (string-join (for/list ([k (in-range width)])
+                                    (number->string (vector-ref prog (+ ip k)))) " "))
+         (define comment (hash-ref d13-comments ip #f))
+         (printf "~a  ~a  ~a~a\n"
+                 (~a ip #:min-width 4 #:align 'right #:pad-string "0")
+                 (~a raw #:min-width 22)
+                 (~a text #:min-width (if comment 34 0))
+                 (if comment (format "; ~a" comment) ""))
+         (loop (+ ip width))]
+        [(= ip 379)
+         ;; The register block is a data island sitting inside the code region.
+         (printf "\n~a  registers, one line: ~a\n"
+                 (~a ip #:min-width 4 #:align 'right #:pad-string "0")
+                 (string-join
+                  (for/list ([a (in-range 379 393)])
+                    (format "~a=~a" (hash-ref d13-global-names a) (vector-ref prog a)))
+                  " "))
+         (loop 393)]
+        [else (loop (add1 ip))])))
+  (printf "```\n\n")
+  (define (a4 v) (~a v #:min-width 4 #:align 'right #:pad-string "0"))
+  (printf "## ~a .. ~a — screen array (~a x ~a, row-major, tile per cell)\n\n"
+          (a4 base) (a4 (+ base (* W H) -1)) W H)
+  (printf "`0` empty · `1` wall · `2` block · `3` paddle · `4` ball\n\n```\n")
+  (for ([y (in-range H)])
+    (define row (for/list ([x (in-range W)]) (vector-ref prog (+ base (* y W) x))))
+    (printf "~a  ~a  ~a\n"
+            (~a (+ base (* y W)) #:min-width 4 #:align 'right #:pad-string "0")
+            (apply string-append (map number->string row))
+            (list->string (for/list ([t (in-list row)]) (hash-ref glyph t #\?)))))
+  (printf "```\n\n")
+  (printf "## ~a .. ~a — point-value array\n\n" (a4 tbase) (a4 (+ tbase (d13-m prog) -1)))
+  (printf "Raw, in address order — `slot = ~a + ((~a*x + y) * ~a + ~a) mod ~a`:\n\n```\n"
+          tbase (d13-colmul prog) (d13-a prog) (d13-c prog) (d13-m prog))
+  (d13-grid prog tbase (d13-m prog) 0 20 3)
+  (printf "```\n\nUnscrambled — every board cell's point value, laid out like the\n")
+  (printf "screen. Only the block cells are ever read; the rest is camouflage:\n\n```\n")
+  (for ([y (in-range H)])
+    (printf "~a\n"
+            (string-join
+             (for/list ([x (in-range W)])
+               (define v (vector-ref prog (d13-score-slot prog x y)))
+               (~a (if (= 2 (d13-tile prog x y)) (number->string v) ".")
+                   #:min-width 2 #:align 'right))
+             " ")))
+  (printf "```\n\n")
+  (printf "## ~a — the tamper canary\n\n```\n~a  ~a   ; checked by the instruction at 0004 before anything else runs\n```\n\n"
+          (a4 (d13-canary-addr prog)) (a4 (d13-canary-addr prog)) (d13-canary-val prog))
+  (printf "## ~a .. ~a — the stack\n\n```\n~a  (uninitialised: grow-on-write memory reads 0)   ; frames: break_block +3 -> slot +3 -> mod +8, so the base never exceeds ~a\n```\n"
+          (a4 n) (a4 (+ n 14)) (a4 n) (+ n 14)))
+
+;; ===========================================================================
 
 ;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
 (define (day2-era? starts prog)
@@ -983,12 +1343,18 @@
     (memv (modulo (vector-ref prog ip) 100) '(1 2 99))))
 
 (module+ main
+  (define argv (current-command-line-arguments))
+  (define full? (for/or ([a (in-vector argv)]) (equal? a "--full")))
+  (define positional
+    (for/list ([a (in-vector argv)] #:unless (regexp-match? #rx"^--" a)) a))
   (define path
-    (let ([args (current-command-line-arguments)])
-      (if (zero? (vector-length args))
-          (build-path here 'up "inputs" "day02.txt")
-          (vector-ref args 0))))
+    (if (null? positional) (build-path here 'up "inputs" "day02.txt") (car positional)))
   (define prog (load-program path))
+  ;; `--full` emits a complete markdown document, so it must not print the
+  ;; usual banner ahead of the title.
+  (when full?
+    (run-day13-full prog path)
+    (exit 0))
   (printf "Program: ~a cells from ~a\n\n" (vector-length prog) path)
   (define starts (trace-code prog))
   (cond
