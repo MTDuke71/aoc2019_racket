@@ -496,6 +496,132 @@ its last known position keeps `|g| ≤ 1` rather than `g = 0` — which is
 sufficient, because the ball's descent to the paddle row takes many ticks and
 the gap closes long before it matters.
 
+### The precondition: a chasing paddle can only *hold* the gap
+
+The invariant cuts both ways, and the second edge is easy to miss. `|g|` never
+grows — but by the same arithmetic it never shrinks either, unless the ball is
+moving *toward* the paddle. If the paddle is behind a receding ball, `Δball_x`
+and `sgn(g)` have the same sign and `g' = g + 1 − 1 = g` **exactly**. Traced
+from a patched starting position:
+
+```
+LOSS   ball x=24, paddle x=20 (paddle behind, ball moving right)
+  tick 1: ball=(24,20) vel=(1,1) paddle=20  gap=-4
+  tick 2: ball=(25,21) vel=(1,1) paddle=21  gap=-4
+  tick 3: ball=(26,22) vel=(1,1) paddle=22  gap=-4
+  tick 4: ball=(27,23) vel=(1,1) paddle=23  gap=-4   -> y=24, game over
+```
+
+Four ticks, four cells of chase, zero cells gained. It would make no difference
+if there were three hundred ticks: a tracking paddle behind a receding ball
+gains nothing, ever. The gap closes only at a *reversal*, when the ball turns
+around and comes back at `2` cells per tick.
+
+So the controller is safe once it is under the ball, and powerless to get there
+against a receding one. The shipped starting state hands it a solved
+precondition — the paddle is already ahead of the ball, on the side the ball is
+travelling toward:
+
+```
+WIN    ball x=18, paddle x=20 (paddle ahead)
+  tick 1: ball=(18,20) paddle=20  gap=+2
+  tick 2: ball=(19,21) paddle=19  gap=+0     <- closed at 2/tick
+  tick 3: ball=(20,22) paddle=19  gap=-1     <- intercept
+  tick 4: ball=(21,21) vel=(1,-1) …          <- bounced; |g| = 1 for the next 4,774 ticks
+```
+
+Tick 3 is worth a second look: the pre-move gap is `−1`, and it still
+intercepts. The joystick is read at address 75 and the paddle moves *before*
+the physics runs in the same tick, so the paddle steps to 20 and only then does
+the `y` probe check `tile(20,23)` and find it. That is the payoff for
+`next-command!` taking a **thunk**: a joystick value computed one instruction
+earlier would leave the paddle a cell behind and this interception would fail.
+
+### Is 4,778 the fastest possible?
+
+The score is start-independent, so "better" can only mean *fewer ticks*.
+Sweeping every legal paddle column (1..38) against ball starts near it
+(offsets −2..+2 on the shipped row, all four initial velocities) — 736
+configurations, 624 of them wins:
+
+| | ticks | score |
+|---|---:|---:|
+| best (ball 26, vel (1,−1)) | **4,025** | 16999 |
+| shipped (ball 18, vel (1,1)) | 4,778 | 16999 |
+| median of 624 wins | 6,392 | 16999 |
+| worst (ball 27, vel (1,1)) | 10,531 | 16999 |
+
+So no: the shipped start ranks 23rd of 624, top 4% but beaten by 15.8%. Every
+one of the 624 scores 16999, which is order-independence confirmed at a scale
+the argument alone can't reach.
+
+The structural result is better than the numbers, though. Of the **152**
+distinct ball start states with at least one win, the number whose tick count
+depends on where the paddle started is **zero**. Paddle 25, 26, 27 and 28 all
+clear in exactly 4,025 given the ball at 26. The paddle's column decides only
+*whether* you win, never *how long* — because under tracking the paddle is a
+**pure mirror**: it arrives directly beneath the ball, and a straight paddle hit
+flips `dy` exactly like a wall hit. Its starting offset washes out in the first
+few ticks, before the first interception.
+
+**But the paddle is only a mirror because *this* controller makes it one.**
+Probe 3 (address 264) fires when probes 1 and 2 both miss, and it flips **both**
+`dx` and `dy`. A paddle at `(ball_x + dx, 23)` rather than `(ball_x, 23)` takes
+a *corner hit* and sends the ball back the way it came, where a straight hit
+lets it continue. One cell of positioning is one bit of steering per bounce. A
+controller that deliberately chose corner hits is not covered by this sweep and
+could plausibly beat 4,025 — which is precisely the boundary named below: it
+would be search, not control.
+
+### The ball is a bouncing DVD logo, and that is a theorem
+
+Watch the animation for a minute and it starts to look like the DVD screensaver.
+That is not a loose resemblance — it is the same dynamical system, and the
+identification pays.
+
+`dx` and `dy` are only ever *negated*, never zeroed, so the ball moves
+diagonally on **every** tick: a 45° billiard in a rectangle, which is what the
+logo is. The immediate consequence is a conserved quantity:
+
+> **`(x + y) mod 2` is invariant.** Each tick changes `x` by ±1 and `y` by ±1,
+> so their sum changes by 0 or ±2. The ball lives on one colour of a
+> checkerboard, forever.
+
+Measured over the real run: **400** distinct cells occupied out of 874 interior
+cells, and **zero** odd-parity cells in 4,778 ticks.
+
+**The corner question, answered.** The logo's folk-question — will it ever land
+exactly in a corner? — is decidable here. The ball starts at `(18,20)`, so its
+class is even. The interior corners are `(1,1)` and `(38,22)` (even) and
+`(38,1)` and `(1,22)` (odd). The ball can **never** touch the odd two, no
+matter how long you watch. And on this input it lands on `(1,1)` *twice*.
+
+**Half the blocks are on cells the ball cannot occupy** — 177 even, 171 odd —
+and it clears them anyway, because a block is broken by *probing* a neighbour,
+not by entering it. Probes 1 and 2 read `(x+dx, y)` and `(x, y+dy)`, both
+parity-flipped. So the reachable set for *breaking* is the whole board while
+the reachable set for *being* is half of it. The collision design quietly
+depends on that; a version that broke blocks by occupying them would be
+unsolvable on this board.
+
+**And the late-game feeling has a number.** Unfold the reflections (the mirror
+trick from the [predictive-controller sidebar](#why-it-cannot-lose-here)) and
+the trajectory on an emptied board is a straight line on a torus: horizontal
+period `2 × 37`, vertical `2 × 21`, so the orbit closes every
+`lcm(74, 42) = 1554` ticks. The whole game is 4,778 ticks — 3.07 orbits. It
+never completes a clean one: the longest drought between block breaks is 140
+ticks against a median of 3. The stretches that look like the screensaver are
+the ball transiting the cleared lower half on a long diagonal before finding
+something at the top.
+
+That periodicity is also a **third non-termination mode**, distinct from the
+[collision livelock](day13_disassembly.md#the-fixed-point-has-no-bound--the-cabinet-can-livelock)
+and from losing: the orbit is closed, so if the last surviving blocks sat off
+the current orbit, the ball would circle forever and the game would never halt.
+Breaking a block perturbs the orbit, which is why it never happens — all 624
+wins in the sweep halted — but "the ball provably cannot reach what is left" is
+a legitimate failure state for this program, not a hypothetical.
+
 **What would break it.** Every hypothesis in that proof is load-bearing, and
 naming them is how the technique transfers:
 
@@ -650,7 +776,7 @@ end of each repaint fixes it.
 
 `2htdp/universe`'s `big-bang` is HtDP's world loop — a value, a clock, and
 handlers (`on-tick`, `on-key`, `to-draw`, `stop-when`). It ships with Racket,
-so this needs no packages. Three things about it are worth a cold reader's
+so this needs no packages. Four things about it are worth a cold reader's
 time.
 
 **The impedance mismatch.** `big-bang` wants a *functional* world that each
@@ -673,6 +799,20 @@ of 440 per frame. Ball and paddle are drawn on top as sprites. That's the
 classic background/sprite split, and the cabinet's write-through protocol is
 what makes it available — the program hands us the invalidation rectangle for
 free.
+
+**A watchdog, because faithful emulation can hang you.** The cabinet's
+collision resolution is a fixed-point loop with no iteration bound, and it
+livelocks when the ball is wedged between a side wall and the paddle on the
+paddle's own row — the probe flips `dx` forever and the machine never reaches
+its next `INPUT`. It is [a real defect in the puzzle program](day13_disassembly.md#the-fixed-point-has-no-bound--the-cabinet-can-livelock),
+reachable by a human holding a direction while the ball comes down a wall
+column, and emulating it faithfully means freezing the window. So `tick!` caps
+one tick at 200 000 instructions — calibrated against a measured median of
+**112** per tick and a p99 of **321** — and flags the cabinet `wedged?`
+instead of spinning. Both peripherals then report `CABINET WEDGED` rather than
+appearing to crash. It is the one place the viewer deliberately stops being a
+faithful emulator, which is exactly the sort of thing an emulator front-end
+exists to decide.
 
 **`stop-when` means "exit", not "pause".** The obvious way to end the game is
 `[stop-when cab-halted? draw]` — and it makes the window vanish the instant the

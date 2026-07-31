@@ -62,13 +62,28 @@
 (struct cab (machine
              [screen  #:mutable] [score  #:mutable] [pending #:mutable]
              [ball    #:mutable] [bally  #:mutable] [paddle  #:mutable]
-             [ticks   #:mutable] [halted? #:mutable]
+             [ticks   #:mutable] [halted? #:mutable] [wedged? #:mutable]
              on-draw))
 
 (define (make-cabinet program #:quarters [quarters 2] #:on-draw [on-draw void])
   (define machine (make-vm program))
   (when quarters (vm-poke! machine 0 quarters))
-  (cab machine (hash) 0 '() 0 0 0 0 #f on-draw))
+  (cab machine (hash) 0 '() 0 0 0 0 #f #f on-draw))
+
+;; A tick that runs this many instructions without asking for the joystick is
+;; never going to ask. The cabinet's collision resolution (address 161) is a
+;; fixed-point loop with NO iteration bound: any bounce re-probes all three
+;; axes, and if both x-neighbours are solid — the ball wedged between a side
+;; wall and the paddle, on the paddle's own row — the probe flips `dx` forever
+;; and the machine never reaches its next INPUT. It is a livelock in the
+;; puzzle program, not here, and it is reachable in ordinary play (hold a
+;; direction while the ball comes down the wall column). Faithful emulation
+;; would hang the UI, so the driver gives up and lets the caller say so.
+;;
+;; Calibration on the real input: 4,778 ticks with a median of 112
+;; instructions each, p99 321, max 17,109 (and that max is the opening repaint,
+;; which `prime!` absorbs before the first tick). 200,000 is ~600x the p99.
+(define instructions/tick-limit 200000)
 
 ;; Absorb one output value. Completing a triple either sets the score (the
 ;; `(-1, 0, v)` sentinel) or updates one screen cell.
@@ -95,17 +110,23 @@
 ;; The first call also absorbs the 1,000-command initial repaint, since that
 ;; happens before the program's first opcode 3.
 (define (tick! c joystick)
-  (let loop ([fed? #f])
-    (match (vm-step! (cab-machine c))
-      ['blocked
-       (cond
-         [fed? c]                            ; asking again → this frame is done
-         [else (vm-enqueue! (cab-machine c) (joystick c))
-               (set-cab-ticks! c (add1 (cab-ticks c)))
-               (loop #t)])]
-      ['ran (loop fed?)]
-      [`(output ,n) (absorb! c n) (loop fed?)]
-      ['halted (set-cab-halted?! c #t) c])))
+  (let loop ([fed? #f] [steps 0])
+    (cond
+      [(> steps instructions/tick-limit) (set-cab-wedged?! c #t) c]
+      [else
+       (match (vm-step! (cab-machine c))
+         ['blocked
+          (cond
+            [fed? c]                         ; asking again → this frame is done
+            [else (vm-enqueue! (cab-machine c) (joystick c))
+                  (set-cab-ticks! c (add1 (cab-ticks c)))
+                  (loop #t 0)])]
+         ['ran (loop fed? (add1 steps))]
+         [`(output ,n) (absorb! c n) (loop fed? (add1 steps))]
+         ['halted (set-cab-halted?! c #t) c])])))
+
+;; Either kind of "stop driving this cabinet".
+(define (cab-done? c) (or (cab-halted? c) (cab-wedged? c)))
 
 ;; Step until the machine *first* asks for the joystick, absorbing the opening
 ;; 1,000-command repaint but playing no tick. That leaves a complete starting
@@ -125,7 +146,8 @@
 (define (blocks-left c)
   (for/sum ([t (in-hash-values (cab-screen c))]) (if (= t 2) 1 0)))
 
-(provide (struct-out cab) make-cabinet prime! tick! ai-joystick blocks-left)
+(provide (struct-out cab) make-cabinet prime! tick! cab-done? ai-joystick
+         blocks-left instructions/tick-limit)
 
 ;; ===========================================================================
 ;; PERIPHERAL 1 — the terminal
@@ -159,15 +181,20 @@
   (flush-output)
   (void (read-line))
   (let loop ()
-    (for ([_ (in-range speed)] #:break (cab-halted? c))
+    (for ([_ (in-range speed)] #:break (cab-done? c))
       (tick! c ai-joystick))
     (paint!)
     (when (positive? fps) (sleep (/ 1.0 fps)))
-    (unless (cab-halted? c) (loop)))
+    (unless (cab-done? c) (loop)))
   (printf "\e[?25h")
   (printf "\n  ~a  final score ~a after ~a ticks.\n"
-          (if (zero? (blocks-left c)) "CLEARED." "Ball missed —")
+          (cond [(cab-wedged? c) "CABINET WEDGED —"]
+                [(zero? (blocks-left c)) "CLEARED."]
+                [else "Ball missed —"])
           (cab-score c) (cab-ticks c))
+  (when (cab-wedged? c)
+    (printf "  The collision fixed point at address 161 never converged.\n")
+    (printf "  See Problem_Statements/days/day13_disassembly.md.\n"))
   (printf "  Press Enter to exit… ")
   (flush-output)
   (void (read-line))
@@ -304,7 +331,7 @@
   (define (joystick c) (if (unbox auto?) (ai-joystick c) (unbox stick)))
   (define (advance c)
     (when (unbox started?)
-      (for ([_ (in-range speed)] #:break (cab-halted? c)) (tick! c joystick)))
+      (for ([_ (in-range speed)] #:break (cab-done? c)) (tick! c joystick)))
     c)
   (define (banner c)
     (above/align
@@ -313,6 +340,8 @@
                    (cab-score c) (blocks-left c) (cab-ticks c))
            16 "white")
      (text (cond
+             [(cab-wedged? c)
+              "CABINET WEDGED — collision fixed point at 161 never converged"]
              [(cab-halted? c)
               (if (zero? (blocks-left c))
                   "CLEARED — [q] or close the window to quit"
@@ -351,7 +380,9 @@
     [stop-when (lambda (_) (unbox quit?)) draw]
     [name "AoC 2019 Day 13 — Care Package"])
   (printf "~a  final score ~a after ~a ticks.\n"
-          (if (zero? (blocks-left c)) "CLEARED." "Ball missed —")
+          (cond [(cab-wedged? c) "CABINET WEDGED —"]
+                [(zero? (blocks-left c)) "CLEARED."]
+                [else "Ball missed —"])
           (cab-score c) (cab-ticks c)))
 
 ;; ===========================================================================

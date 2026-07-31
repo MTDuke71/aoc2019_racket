@@ -427,6 +427,48 @@ paddle stays put. It never fires in the tracking run: 4,777 non-zero joystick
 reads produce exactly 4,777 paddle redraws, so every requested move was
 allowed.
 
+### The fixed point has no bound — the cabinet can livelock
+
+Re-probing after every bounce is elegant right up until it doesn't terminate,
+and nothing in the program says it must. The loop assumes that flipping a
+velocity component eventually finds a free cell on that axis. It doesn't when
+**both** x-neighbours are solid:
+
+```
+ball=(1,23) vel=(1,1) paddle_x=2        ip=183, inside the probes
+
+   y=22  .##....
+   y=23  .##o=..    probe x: tile(2,23) = 3 (paddle) -> solid -> dx = -1, flag
+   y=24  .##....    re-probe: tile(0,23) = 1 (wall)  -> solid -> dx = +1, flag
+                    re-probe: the paddle again … forever
+```
+
+The ball is wedged in the one-cell gap between the left wall and the paddle,
+**on the paddle's own row**. Every pass sets the bounce flag, so 261/316 jump
+back to 161 unconditionally and the machine never reaches its next `INPUT`.
+Note that the livelock *preempts* the loss: the ball would have crossed to
+`y = 24` on the very next move, but there is no next move.
+
+It happens at either wall, and it is not rare: 3 of the 736 swept starting
+configurations wedge — `(paddle 6, ball 4, vel (−1,1))` and
+`(paddle 8, ball 6, vel (−1,−1))` against the left wall, `(paddle 33, ball 35,
+vel (1,1))` against the right one. All three are the same picture mirrored:
+ball moving *into* a wall with the paddle just inside it.
+
+This is not reachable from the shipped starting state (4,778 ticks, clean
+halt), but it is reachable in ordinary play — hold a direction while the ball
+comes down a wall column and the paddle can arrive beside it on exactly the
+tick the ball occupies `(1, 23)`. It was found by accident, by sweeping
+alternative start positions (below), and it is why
+[scripts/day13_arcade.rkt](../../scripts/day13_arcade.rkt) puts a watchdog on
+each tick: faithful emulation of this program can hang its host.
+
+A bounded version costs one instruction's worth of thought — cap the re-probe
+at two passes, or drop the flag when a pass changes nothing — so this reads as
+a generator that never tested the paddle against a wall, not as a deliberate
+trap. It is the only defect the disassembly turned up in an otherwise
+notably well-built program.
+
 ---
 
 ## Both answers, statically
@@ -454,6 +496,35 @@ three-line argument the disassembly makes checkable:
 
 So Part 2 has no path dependence at all. The "game" is a very elaborate
 delivery mechanism for a sum you can compute with a `for` loop over the image.
+
+**Tested, not just argued.** Patch the ball and paddle to different starting
+positions — in the registers *and* in the screen array, since a stale tile
+would act as a solid obstacle — and replay with the same tracking controller:
+
+| ball | velocity | paddle | ticks | score |
+|---|---|---:|---:|---:|
+| (18,20) | (1,1) | 20 | 4,778 | **16999** |
+| (36,20) | (1,1) | 38 | 5,196 | **16999** |
+| (24,20) | (1,1) | 30 | 6,276 | **16999** |
+| (18,20) | (1,−1) | 20 | 6,446 | **16999** |
+| (12,20) | (1,1) | 12 | 7,700 | **16999** |
+| (30,20) | (1,1) | 30 | 8,044 | **16999** |
+| (28,20) | (−1,−1) | 20 | 8,814 | **16999** |
+
+Seven trajectories differing by 84% in length, one score. Widening that to
+every legal paddle column (1..38) against ball starts near it and all four
+initial velocities — 736 configurations, **624 of them wins** — the range of
+durations grows to 4,025 … 10,531 ticks and the set of scores stays exactly
+`{16999}`. Order-independence isn't an argument that happens to hold; it is
+the only thing 624 different games agree on.
+
+What *does* vary is whether you get a score at all: 109 of those starts lose in
+four ticks and report `0`, because the ball begins three rows above the lose
+line and the tracking controller is only safe once it is already under the ball
+— the boundary condition the [function guide](day13_function_guide.md)'s parity
+argument assumes rather than proves. Three more
+([ball (6,20), paddle 12](#the-fixed-point-has-no-bound--the-cabinet-can-livelock)
+among them) never terminate at all.
 
 The one thing that *can* change the answer is losing, and the program is blunt
 about it:
