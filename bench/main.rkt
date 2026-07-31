@@ -26,7 +26,8 @@
          (prefix-in d09:  "../src/day09.rkt")
          (prefix-in d10:  "../src/day10.rkt")
          (prefix-in d11:  "../src/day11.rkt")
-         (prefix-in d12:  "../src/day12.rkt"))
+         (prefix-in d12:  "../src/day12.rkt")
+         (prefix-in d13:  "../src/day13.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -116,6 +117,14 @@
 ;; call, so 50 iterations keeps the mean stable without minutes of bench.
 (bench-day "12" (read-day-input 12) d12:parse-input d12:part1 d12:part2
            #:iters 50)
+
+;; Day 13's program is the biggest so far (~2600 cells), so even the parse is
+;; milliseconds. Part 1 runs the cabinet once to draw the board (~4 ms); Part
+;; 2 plays the whole game to completion — 4778 game ticks, 20805 draw
+;; commands, ~610k `vm-step!` calls — for ~130 ms per call. 20
+;; iterations keeps the mean stable without minutes of bench time.
+(bench-day "13" (read-day-input 13) d13:parse-input d13:part1 d13:part2
+           #:iters 20)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1

@@ -36,13 +36,22 @@
 ;;            So the trace embeds the same block/resume VM protocol as
 ;;            src/day11.rkt and drives it with the real hull-painting loop:
 ;;            the disassembly and the solution are the same computation.
+;;   Day 13 — the first COMPILED program: a real calling convention, a heap of
+;;            two 1000-cell arrays, and no control-flow self-modification, so
+;;            recursive descent recovers all of it. The static passes then
+;;            read BOTH puzzle answers straight out of the data regions —
+;;            the starting screen is a literal tile array and the score is an
+;;            order-independent sum over a permuted point-value table — and
+;;            three instrumented dynamic runs (no poke / free play / a
+;;            deliberate loss) confirm them.
 ;;
 ;; Usage:  racket scripts/intcode_disasm.rkt [path-to-input]
 ;;         (defaults to inputs/day02.txt)
 
 (require racket/runtime-path
          (prefix-in d05: "../src/day05.rkt")
-         (prefix-in d11: "../src/day11.rkt"))
+         (prefix-in d11: "../src/day11.rkt")
+         (prefix-in d13: "../src/day13.rkt"))
 
 (define-runtime-path here ".")
 
@@ -685,6 +694,255 @@
   (printf "camera input, so its output is not an affine form (Day 2 only).\n"))
 
 ;; ===========================================================================
+;; DAY 13 ERA — COMPILED code: an arcade cabinet with a calling convention
+;; ===========================================================================
+;;
+;; Every earlier day's program was hand-rolled: straight-line arithmetic (Day
+;; 2), a self-modifying obfuscated self-test (Day 5), a dispatch table of tiny
+;; modules (Day 7), a relative-base test battery (Day 9), a two-headed
+;; self-modifying blob (Day 11). Day 13's 2,640 cells are the first that read
+;; like COMPILER OUTPUT: a fixed calling convention (caller writes the return
+;; address into rel[0] and the arguments into rel[1..k]; callee shifts the
+;; relative base by the frame size, so arguments become rel[-k..-1]; the
+;; return value goes back into the first argument slot; `jump rel[0]` is
+;; `ret`), a heap laid out in two 1,000-cell arrays past the code, and a
+;; recurring set of two-template idioms for the instructions the ISA lacks
+;; (`li`, `mov`, `jmp`, indexed load/store).
+;;
+;; Consequences for disassembly, both good:
+;;
+;;   * Static recursive descent recovers essentially the WHOLE program — every
+;;     call site is an immediate-mode jump, and the self-modification (three
+;;     patched operand cells) never touches control flow. Day 11's problem is
+;;     gone.
+;;   * The data regions are readable off the disk. The 40x25 starting screen
+;;     is a literal tile array; the per-block point values are a second array
+;;     hidden behind an affine permutation. So BOTH puzzle answers can be
+;;     computed statically, without ever running the machine — which is what
+;;     the static passes below do, and what the dynamic passes then confirm.
+
+;; The program's own constants, read out of the operand cells the static
+;; listing prints, so these are citations rather than magic numbers. Each
+;; comment names the instruction the operand belongs to.
+(define (d13-const prog addr) (vector-ref prog addr))
+(define (d13-W      prog) (d13-const prog  49)) ; `mem[381] = (mem[382] < #40)` @47
+(define (d13-H      prog) (d13-const prog  60)) ; `mem[381] = (mem[383] < #25)` @58
+(define (d13-base   prog) (d13-const prog 560)) ; `mem[566] = #639 + mem[566]` @559
+(define (d13-stride prog) (d13-const prog 582)) ; `mem[593] = rel[-1] * #40`   @580
+(define (d13-colmul prog) (d13-const prog 604)) ; `rel[1] = #25 * rel[-2]`     @603
+(define (d13-a      prog) (d13-const prog 613)) ; `rel[2] = #503`              @611
+(define (d13-c      prog) (d13-const prog 616)) ; `rel[3] = #366`              @615
+(define (d13-m      prog) (d13-const prog 621)) ; `rel[4] = #1000`             @619
+(define (d13-tbase  prog) (d13-const prog 632)) ; `rel[-2] = rel[1] + #1639`   @630
+
+;; The screen array is row-major from `base`: tile (x,y) lives at
+;; base + y*stride + x. Routines 549 (store) and 578 (load) compute exactly
+;; this address and PATCH it into their own operand cell — Intcode has no
+;; double indirection, so indexed access has to be synthesized.
+(define (d13-tile prog x y)
+  (vector-ref prog (+ (d13-base prog) (* y (d13-stride prog)) x)))
+
+;; The point-value array is NOT indexed by the screen's row-major offset. It
+;; is indexed by an affine permutation of the COLUMN-major offset:
+;;   slot(x,y) = tbase + ((colmul*x + y) * a + c) mod m
+;; With gcd(a, m) = 1 this is a bijection on 0..m-1, so the 1,000 point values
+;; are a scrambled copy of the 1,000 board cells. Routine 601 computes it;
+;; routine 456 supplies the `mod` (the ISA has no division).
+(define (d13-score-slot prog x y)
+  (+ (d13-tbase prog)
+     (modulo (+ (* (+ (* (d13-colmul prog) x) y) (d13-a prog)) (d13-c prog))
+             (d13-m prog))))
+
+;; The starting screen, read straight off the disk image as a
+;; src/day13.rkt-shaped `(x . y) -> tile-id` hash — no VM involved.
+(define (d13-image-screen prog)
+  (for*/hash ([y (in-range (d13-H prog))] [x (in-range (d13-W prog))])
+    (values (cons x y) (d13-tile prog x y))))
+
+;; Part 2's answer, statically. Every block is broken exactly once (the game
+;; only halts when the counter at 387 reaches 0), and each break does
+;; `mem[386] += mem[slot(x,y)]`, so the final score is an ORDER-INDEPENDENT
+;; sum over block cells — computable without playing.
+(define (d13-static-score prog)
+  (for*/sum ([y (in-range (d13-H prog))] [x (in-range (d13-W prog))])
+    (if (= 2 (d13-tile prog x y))
+        (vector-ref prog (d13-score-slot prog x y))
+        0)))
+
+;; The board with each block replaced by its point value's tens digit — the
+;; hidden score map made visible.
+(define (d13-heatmap prog)
+  (for/list ([y (in-range (d13-H prog))])
+    (list->string
+     (for/list ([x (in-range (d13-W prog))])
+       (define t (d13-tile prog x y))
+       (if (= t 2)
+           (string-ref "0123456789"
+                       (min 9 (quotient (vector-ref prog (d13-score-slot prog x y)) 10)))
+           (case t [(0) #\space] [(1) #\#] [(3) #\=] [(4) #\o] [else #\?]))))))
+
+;; Drive the cabinet the way src/day13.rkt's `play` does, instrumented.
+;; `quarters` is #f (leave address 0 alone — Part 1) or 2 (free play).
+;; `policy` maps (ball-x, paddle-x) to a joystick reading, so the caller can
+;; play well, badly, or not at all. Returns a stats hash.
+(define (trace-cabinet prog quarters policy)
+  (define mem (d05:intcode-mem prog))
+  (when quarters (d05:intcode-set! mem 0 quarters))
+  (define machine (rvm 0 0 '() #f))
+  (define counts (make-hash))
+  (define rel-reads (box 0))
+  (define rel-writes (box 0))
+  (define draws (make-hash))              ; tile id -> times drawn
+  (let loop ([pending '()] [screen (hash)] [score 0] [events 0]
+             [ball 0] [paddle 0] [ticks 0])
+    (match (rvm-step! machine mem counts rel-reads rel-writes)
+      ['blocked
+       (set-rvm-inputs! machine (list (policy ball paddle)))
+       (loop pending screen score events ball paddle (add1 ticks))]
+      ['ran (loop pending screen score events ball paddle ticks)]
+      [`(output ,n)
+       (define p (cons n pending))
+       (cond
+         [(< (length p) 3) (loop p screen score events ball paddle ticks)]
+         [else
+          (match-define (list x y v) (reverse p))
+          (cond
+            [(and (= x -1) (= y 0))
+             (loop '() screen v (add1 events) ball paddle ticks)]
+            [else
+             (hash-update! draws v add1 0)
+             (loop '() (hash-set screen (cons x y) v) score events
+                   (if (= v 4) x ball) (if (= v 3) x paddle) ticks)])])]
+      ['halted
+       (hash 'screen screen 'score score 'events events 'ticks ticks
+             'draws draws 'counts counts
+             'total (for/sum ([v (in-hash-values counts)]) v)
+             'rel-reads (unbox rel-reads) 'rel-writes (unbox rel-writes))])))
+
+(define (d13-report label stats)
+  (printf "\n=== DYNAMIC TRACE — ~a ===\n" label)
+  (summarize-counts (hash-ref stats 'counts) (hash-ref stats 'total))
+  (define draws (hash-ref stats 'draws))
+  (printf "\n  relative-mode reads   : ~a\n" (hash-ref stats 'rel-reads))
+  (printf "  relative-mode writes  : ~a\n" (hash-ref stats 'rel-writes))
+  (printf "  joystick reads (ticks): ~a\n" (hash-ref stats 'ticks))
+  (printf "  draw commands         : ~a  (empty ~a, wall ~a, block ~a, paddle ~a, ball ~a)\n"
+          (for/sum ([v (in-hash-values draws)]) v)
+          (hash-ref draws 0 0) (hash-ref draws 1 0) (hash-ref draws 2 0)
+          (hash-ref draws 3 0) (hash-ref draws 4 0))
+  (printf "  score triples (-1,0,v): ~a\n" (hash-ref stats 'events))
+  (printf "  final score           : ~a\n" (hash-ref stats 'score))
+  (printf "  blocks left on screen : ~a\n"
+          (d13:count-tiles (hash-ref stats 'screen) 2)))
+
+(define (day13-cabinet? path)
+  (define s (if (path? path) (path->string path) path))
+  (regexp-match? #rx"day13" s))
+
+(define (run-day13-disasm prog)
+  ;; --- Pass 1: static recursive descent — near-total, unlike Days 5/11. ---
+  (define starts (trace-code prog))
+  (define static-ops (disassemble-cfg prog starts))
+  (printf "\nStatic descent decoded ~a instructions covering the WHOLE program:\n"
+          (length static-ops))
+  (printf "every call site is an immediate-mode jump (`if #1 != 0 jump #578` is\n")
+  (printf "this compiler's `call`), and the three self-modified cells (435, 566,\n")
+  (printf "593) are operand patches for indexed load/store — they never move\n")
+  (printf "control flow, so descent is not defeated the way Days 5/11 defeat it.\n")
+  (printf "Two artifacts of descent are worth reading as findings, not bugs:\n")
+  (printf "  * the instructions rendered `mem[0] = ...` / `mem[566] = ...` show\n")
+  (printf "    the ON-DISK operand; at runtime those cells hold a computed\n")
+  (printf "    screen address, so the real instruction is `mem[base+y*40+x] = t`.\n")
+  (printf "  * the run of `mem[1] = mem[1] + mem[1]` at ~a.. is NOT code: it is\n"
+          (d13-base prog))
+  (printf "    the fall-through of `if #0 == 0 jump rel[0]` (an unconditional\n")
+  (printf "    `ret`, whose fall-through is unreachable) landing in the board\n")
+  (printf "    array. Decoding `1 1 1 1` as an instruction is descent showing us\n")
+  (printf "    the top wall row of the screen.\n")
+  ;; --- Pass 2: the recovered memory map. ---
+  (printf "\n=== MEMORY MAP (recovered) ===\n")
+  (printf "     0 ..    11 : tamper guard — HALT unless mem[~a] == ~a\n"
+          (d13-const prog 5) (d13-const prog 6))
+  (printf "    12 ..    68 : draw-the-board loop (y in 0..~a, x in 0..~a)\n"
+          (sub1 (d13-H prog)) (sub1 (d13-W prog)))
+  (printf "    69 ..   378 : the game loop (joystick, paddle, ball physics)\n")
+  (printf "   379 ..   392 : the machine's registers (see below)\n")
+  (printf "   393 ..   636 : subroutines\n")
+  (printf "   ~a .. ~a : screen array, ~a x ~a, row-major, tile per cell\n"
+          (pad (d13-base prog))
+          (pad (+ (d13-base prog) (* (d13-W prog) (d13-H prog)) -1))
+          (d13-W prog) (d13-H prog))
+  (printf "   ~a .. ~a : point-value array, indexed by an affine PERMUTATION\n"
+          (pad (d13-tbase prog)) (pad (+ (d13-tbase prog) (d13-m prog) -1)))
+  (printf "   ~a          : the tamper canary\n"
+          (pad (d13-const prog 5)))
+  (printf "\n=== REGISTERS (the compiler's globals, 379..392) ===\n")
+  (printf "(values shown are the ON-DISK initial contents)\n")
+  (for ([spec (in-list '((379 "constant 0 — operand of the instruction at 0")
+                         (380 "constant 1 — operand of the instruction at 0")
+                         (381 "scratch: every comparison result lands here")
+                         (382 "draw-loop cursor x")
+                         (383 "draw-loop cursor y")
+                         (384 "joystick reading (opcode 3 target)")
+                         (385 "free-play flag — set by address 0: 1 = draw & halt, 0 = play")
+                         (386 "score")
+                         (387 "blocks remaining (decremented at 443)")
+                         (388 "ball x")
+                         (389 "ball y")
+                         (390 "ball dx")
+                         (391 "ball dy")
+                         (392 "paddle x")))])
+    (printf "  mem[~a] = ~a  ~a\n"
+            (car spec) (pad3 (vector-ref prog (car spec))) (cadr spec)))
+  (printf "\n=== SUBROUTINES (caller-allocated frames, ret addr in rel[0]) ===\n")
+  (printf "  393  break_block(x, y)   frame 3  — erase, look up value, score, count down\n")
+  (printf "  456  mod(n, a, c, m)     frame 8  — (n*a + c) mod m by octal shift-and-subtract\n")
+  (printf "  549  draw(x, y, tile)    frame 4  — store to screen AND emit (x,y,tile)\n")
+  (printf "  578  tile_at(x, y)       frame 3  — load from screen\n")
+  (printf "  601  slot(x, y)          frame 3  — address of (x,y)'s point value\n")
+  ;; --- Pass 3: the answers, statically. ---
+  (define image (d13-image-screen prog))
+  (printf "\n=== STATIC PASS — the starting screen, read off the disk ===\n")
+  (printf "No VM involved: cells ~a..~a decoded as a ~a x ~a tile array.\n"
+          (d13-base prog) (+ (d13-base prog) (* (d13-W prog) (d13-H prog)) -1)
+          (d13-W prog) (d13-H prog))
+  (for ([line (in-list (string-split (d13:render image) "\n"))])
+    (printf "  ~a\n" line))
+  (printf "\n  tile histogram: empty ~a, wall ~a, block ~a, paddle ~a, ball ~a\n"
+          (d13:count-tiles image 0) (d13:count-tiles image 1)
+          (d13:count-tiles image 2) (d13:count-tiles image 3)
+          (d13:count-tiles image 4))
+  (printf "  PART 1, statically  : ~a blocks\n" (d13:count-tiles image 2))
+  (printf "  cross-check mem[387]: ~a  (the program ships its own block count)\n"
+          (vector-ref prog 387))
+  (printf "\n=== STATIC PASS — the hidden score map ===\n")
+  (printf "slot(x,y) = ~a + ((~a*x + y) * ~a + ~a) mod ~a\n"
+          (d13-tbase prog) (d13-colmul prog) (d13-a prog) (d13-c prog) (d13-m prog))
+  (printf "gcd(~a, ~a) = ~a, so the map is a BIJECTION: the point values are a\n"
+          (d13-a prog) (d13-m prog) (gcd (d13-a prog) (d13-m prog)))
+  (printf "permuted copy of the board, in column-major order while the screen\n")
+  (printf "array is row-major. Blocks shown below as their value's tens digit:\n")
+  (for ([line (in-list (d13-heatmap prog))])
+    (printf "  ~a\n" line))
+  (printf "\n  PART 2, statically: ~a  (sum of the point values over the ~a block cells)\n"
+          (d13-static-score prog) (d13:count-tiles image 2))
+  ;; --- Pass 4: dynamic confirmation, three ways to run the cabinet. ---
+  (define p1 (trace-cabinet prog #f (lambda (b p) 0)))
+  (d13-report "no poke, address 0 left alone (Part 1)" p1)
+  (printf "  starting screen matches the disk image: ~a\n"
+          (equal? (hash-ref p1 'screen) image))
+  (define p2 (trace-cabinet prog 2 (lambda (b p) (sgn (- b p)))))
+  (d13-report "free play, tracking joystick (Part 2)" p2)
+  (define lost (trace-cabinet prog 2 (lambda (b p) 0)))
+  (d13-report "free play, joystick stuck at 0 (a loss)" lost)
+  (printf "\nA loss emits (-1, 0, 0) at address 372 and halts: the cabinet ZEROES\n")
+  (printf "the reported score when the ball crosses y = ~a. A driver that misses\n"
+          (d13-const prog 367))
+  (printf "the ball does not report a partial score — it reports nothing.\n")
+  (printf "\nAffine symbolic pass skipped: this program branches on a live\n")
+  (printf "joystick, so its output is not an affine form (Day 2 only).\n"))
+
+;; ===========================================================================
 
 ;; A program is "Day 2 era" iff its reachable code uses only opcodes 1/2/99.
 (define (day2-era? starts prog)
@@ -707,6 +965,8 @@
      (run-day7-disasm prog)]
     [(day11-robot? path)
      (run-day11-disasm prog)]
+    [(day13-cabinet? path)
+     (run-day13-disasm prog)]
     [(day2-era? starts prog)
      ;; Branchless Day 2 code: linear sweep + affine proof.
      (disassemble prog)
