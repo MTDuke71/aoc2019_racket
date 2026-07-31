@@ -721,19 +721,52 @@
 ;;     computed statically, without ever running the machine — which is what
 ;;     the static passes below do, and what the dynamic passes then confirm.
 
-;; The program's own constants, read out of the operand cells the static
-;; listing prints, so these are citations rather than magic numbers. Each
-;; comment names the instruction the operand belongs to.
-(define (d13-const prog addr) (vector-ref prog addr))
-(define (d13-W      prog) (d13-const prog  49)) ; `mem[381] = (mem[382] < #40)` @47
-(define (d13-H      prog) (d13-const prog  60)) ; `mem[381] = (mem[383] < #25)` @58
-(define (d13-base   prog) (d13-const prog 560)) ; `mem[566] = #639 + mem[566]` @559
-(define (d13-stride prog) (d13-const prog 582)) ; `mem[593] = rel[-1] * #40`   @580
-(define (d13-colmul prog) (d13-const prog 604)) ; `rel[1] = #25 * rel[-2]`     @603
-(define (d13-a      prog) (d13-const prog 613)) ; `rel[2] = #503`              @611
-(define (d13-c      prog) (d13-const prog 616)) ; `rel[3] = #366`              @615
-(define (d13-m      prog) (d13-const prog 621)) ; `rel[4] = #1000`             @619
-(define (d13-tbase  prog) (d13-const prog 632)) ; `rel[-2] = rel[1] + #1639`   @630
+;; The program's own constants, pulled out of the instructions the static
+;; listing prints, so these are citations rather than magic numbers.
+;;
+;; They must be read STRUCTURALLY, not from fixed operand cells. AoC generates
+;; a different program per user, and while the instruction addresses are stable
+;; across inputs (every equivalent template has the same width), the *operand
+;; slot* holding a constant is not: `li k` is emitted as any of `add #0,#k`,
+;; `add #k,#0`, `mul #k,#1`, `mul #1,#k`, so `k` lands in slot 1 or slot 2
+;; depending on the coin flip. Verified against a second user's input, where
+;; `rel[3] = #366` (constant in slot 1) appears as `rel[3] = #1 * #67`
+;; (constant in slot 2) — reading a fixed cell there yields `1`, silently.
+;;
+;; So: decode the instruction, take the immediate operand, and when both are
+;; immediate take the one that isn't the operation's identity element (0 for
+;; add, 1 for mul) — which is exactly what makes the pair of templates
+;; equivalent in the first place.
+(define (d13-imm prog ip)
+  (define op (modulo (vector-ref prog ip) 100))
+  (define identity (if (= op 2) 1 0))
+  (define (imm? n) (= 1 (param-mode (vector-ref prog ip) n)))
+  (define (arg n) (vector-ref prog (+ ip n)))
+  (cond
+    [(and (imm? 1) (imm? 2)) (if (= (arg 1) identity) (arg 2) (arg 1))]
+    [(imm? 1) (arg 1)]
+    [(imm? 2) (arg 2)]
+    [else (error 'd13-imm "no immediate operand at ~a" ip)]))
+
+;; The position-mode operand of a two-parameter instruction — the other half of
+;; `d13-imm`, used for the tamper guard, whose two operands are "the cell to
+;; check" (position) and "what it should hold" (immediate) in either order.
+(define (d13-pos prog ip)
+  (define (imm? n) (= 1 (param-mode (vector-ref prog ip) n)))
+  (cond [(not (imm? 1)) (vector-ref prog (+ ip 1))]
+        [else (vector-ref prog (+ ip 2))]))
+
+(define (d13-W      prog) (d13-imm prog  47)) ; `mem[381] = (mem[382] < #40)`
+(define (d13-H      prog) (d13-imm prog  58)) ; `mem[381] = (mem[383] < #25)`
+(define (d13-base   prog) (d13-imm prog 559)) ; `mem[566] = #639 + mem[566]`
+(define (d13-stride prog) (d13-imm prog 580)) ; `mem[593] = rel[-1] * #40`
+(define (d13-colmul prog) (d13-imm prog 603)) ; `rel[1] = #25 * rel[-2]`
+(define (d13-a      prog) (d13-imm prog 611)) ; `rel[2] = #503`
+(define (d13-c      prog) (d13-imm prog 615)) ; `rel[3] = #366`
+(define (d13-m      prog) (d13-imm prog 619)) ; `rel[4] = #1000`
+(define (d13-tbase  prog) (d13-imm prog 630)) ; `rel[-2] = rel[1] + #1639`
+(define (d13-canary-addr prog) (d13-pos prog 4)) ; `mem[381] = (mem[2639] == #310356)`
+(define (d13-canary-val  prog) (d13-imm prog 4))
 
 ;; The screen array is row-major from `base`: tile (x,y) lives at
 ;; base + y*stride + x. Routines 549 (store) and 578 (load) compute exactly
@@ -862,7 +895,7 @@
   ;; --- Pass 2: the recovered memory map. ---
   (printf "\n=== MEMORY MAP (recovered) ===\n")
   (printf "     0 ..    11 : tamper guard — HALT unless mem[~a] == ~a\n"
-          (d13-const prog 5) (d13-const prog 6))
+          (d13-canary-addr prog) (d13-canary-val prog))
   (printf "    12 ..    68 : draw-the-board loop (y in 0..~a, x in 0..~a)\n"
           (sub1 (d13-H prog)) (sub1 (d13-W prog)))
   (printf "    69 ..   378 : the game loop (joystick, paddle, ball physics)\n")
@@ -875,7 +908,7 @@
   (printf "   ~a .. ~a : point-value array, indexed by an affine PERMUTATION\n"
           (pad (d13-tbase prog)) (pad (+ (d13-tbase prog) (d13-m prog) -1)))
   (printf "   ~a          : the tamper canary\n"
-          (pad (d13-const prog 5)))
+          (pad (d13-canary-addr prog)))
   (printf "\n=== REGISTERS (the compiler's globals, 379..392) ===\n")
   (printf "(values shown are the ON-DISK initial contents)\n")
   (for ([spec (in-list '((379 "constant 0 — operand of the instruction at 0")
@@ -937,7 +970,7 @@
   (d13-report "free play, joystick stuck at 0 (a loss)" lost)
   (printf "\nA loss emits (-1, 0, 0) at address 372 and halts: the cabinet ZEROES\n")
   (printf "the reported score when the ball crosses y = ~a. A driver that misses\n"
-          (d13-const prog 367))
+          (d13-imm prog 365))
   (printf "the ball does not report a partial score — it reports nothing.\n")
   (printf "\nAffine symbolic pass skipped: this program branches on a live\n")
   (printf "joystick, so its output is not an affine form (Day 2 only).\n"))

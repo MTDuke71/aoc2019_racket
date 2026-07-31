@@ -625,6 +625,69 @@ from the tile draws.
 
 ---
 
+## What changes between users' inputs
+
+AoC generates a different program per user, so the honest test of everything
+above is whether it survives an input it was never written against. A second
+user's Day 13 program, run through the same passes:
+
+| | this repo's input | the second input |
+|---|---:|---:|
+| program length | 2,640 cells | 2,800 cells |
+| screen | 40 × 25 | **45 × 24** |
+| blocks (`mem[387]`) | 348 | 462 |
+| screen array | 639 … 1638 | 639 … 1718 |
+| point-value array | 1639 … 2638 | 1719 … 2798 |
+| hash | `((25x + y)·503 + 366) mod 1000` | `((24x + y)·547 + 67) mod 1080` |
+| canary | `mem[2639] == 310356` | `mem[2799] == 144351` |
+| ball / paddle start | (18,20), paddle 20 | (20,19), paddle 22 |
+| paddle row / lose line | 23 / 24 | 22 / 23 |
+| Part 1 / Part 2 | 348 / 16999 | **462 / 23981** |
+
+**The whole memory map is a function of `(W, H)`.** Length is
+`639 + 2·W·H + 1`; the table base is `639 + W·H`; the modulus is `W·H`; the
+column multiplier is `H`; the paddle sits on row `H − 2` and the lose line is
+`H − 1`; the paddle clamp is `1 < x < W − 2`. Every one of those relations
+holds on both inputs, which is a much stronger statement than "the constants
+differ" — the generator is parameterised by the board size and nothing else
+structural.
+
+**The code region is 639 cells in both**, and every instruction sits at the
+same address in both. That is why the array base is `639` for everyone. But
+**148 of those 639 cells differ**, which is the template randomisation
+[named above](#the-idiom-set) caught in the act:
+
+```
+addr 22   mine: 20102  1  382  1     rel[1] = #1 * mem[382]
+          alt : 21001  382  0   1     rel[1] = mem[382] + #0
+addr 615  mine: 21101  366  0   3     rel[3] = #366 + #0
+          alt : 21102  1  67   3      rel[3] = #1 * #67
+```
+
+Same instruction, same width, same address, different template — so addresses
+never move, but **which operand slot holds a constant does**. That distinction
+cost this disassembler a bug: reading the hash addend from a fixed cell (616)
+gives `366` on one input and `1` on the other, silently. The fix is to decode
+the instruction and take its immediate operand — preferring the one that isn't
+the operation's identity element when both are immediate, which is exactly
+what makes the two templates equivalent. `d13-imm` in
+[scripts/intcode_disasm.rkt](../../scripts/intcode_disasm.rkt) does that now,
+and the tool reproduces the table above on both inputs unaided.
+
+**The static solve generalises.** Reading the second input's screen array gives
+462 blocks; summing its point table over those cells through its *own* recovered
+hash gives 23981. Both match what the cabinet reports when you actually play it
+(6,177 ticks, board cleared). The disassembly is a description of the
+*generator*, not of one file.
+
+One footnote, because it is the guard doing precisely the job
+[named at the top](#the-head-0--11--a-tamper-guard-that-is-really-a-parser-self-test):
+that second input arrived as 2,800 pasted integers, and the first thing that
+confirmed the transcription was correct was the program's own canary — cell
+2,799 still holding 144351. A parser self-test, used as one.
+
+---
+
 ## The problem within the problem
 
 Every previous Intcode disassembly ended with the machine winning something:

@@ -128,6 +128,21 @@
 ;; Either kind of "stop driving this cabinet".
 (define (cab-done? c) (or (cab-halted? c) (cab-wedged? c)))
 
+;; Board geometry, read off the OPENING FRAME rather than out of the program.
+;; The repaint `prime!` just absorbed draws every cell exactly once, so the
+;; screen hash already knows how big the board is and where the paddle sits.
+;; That matters because AoC ships a different board size per user — 40x25 here,
+;; 45x24 on the second input the disassembly compares against — and asking the
+;; data beats archaeology on the code. Returns (values W H paddle-row).
+(define (screen-geometry c)
+  (define ks (hash-keys (cab-screen c)))
+  (define W (add1 (apply max (map car ks))))
+  (define H (add1 (apply max (map cdr ks))))
+  (define paddle-row
+    (or (for/first ([(k v) (in-hash (cab-screen c))] #:when (= v 3)) (cdr k))
+        (- H 2)))                        ; the generator always uses H-2
+  (values W H paddle-row))
+
 ;; Step until the machine *first* asks for the joystick, absorbing the opening
 ;; 1,000-command repaint but playing no tick. That leaves a complete starting
 ;; board to show while the viewer waits for the go-ahead. (Without this, the
@@ -147,7 +162,7 @@
   (for/sum ([t (in-hash-values (cab-screen c))]) (if (= t 2) 1 0)))
 
 (provide (struct-out cab) make-cabinet prime! tick! cab-done? ai-joystick
-         blocks-left instructions/tick-limit)
+         blocks-left screen-geometry instructions/tick-limit)
 
 ;; ===========================================================================
 ;; PERIPHERAL 1 — the terminal
@@ -156,16 +171,21 @@
 ;; ANSI: `\e[2J` clear, `\e[H` cursor home, `\e[?25l/h` hide/show cursor.
 ;; Redrawing from home (rather than clearing each frame) avoids flicker.
 ;; Keyboard input is not portable without raw-mode support, so the terminal
-;; peripheral is watch-only — the AI plays.
+;; peripheral is watch-only — the AI plays. Board selection therefore happens
+;; at the "Press Enter" prompt rather than with a live key: type a number
+;; first and that board is loaded instead. The window peripheral does the same
+;; thing with the number keys on its start screen.
 
-(define (run-terminal program #:fps [fps 30] #:speed [speed 2])
-  (define c (make-cabinet program))
+(define (run-terminal boards #:fps [fps 30] #:speed [speed 2] #:start [start 0])
+  (define idx (box start))
+  (define c (make-cabinet (cdr (list-ref boards (unbox idx)))))
   (printf "\e[2J\e[?25l")
   ;; `\e[J` erases from the cursor down, so a prompt printed under one frame is
   ;; wiped by the next one instead of lingering below a shorter redraw.
   (define (paint!)
     (printf "\e[H")
-    (printf "AoC 2019 Day 13 — the AI plays  (tick ~a)\n\n"
+    (printf "AoC 2019 Day 13 [~a] — the AI plays  (tick ~a)\n\n"
+            (car (list-ref boards (unbox idx)))
             (~a (cab-ticks c) #:min-width 5 #:align 'right))
     (displayln (d13-render (cab-screen c)))
     (printf "\n  score ~a    blocks left ~a\n\e[J"
@@ -177,9 +197,27 @@
   ;; closed stdin, which keeps the script usable non-interactively.
   (prime! c)
   (paint!)
-  (printf "\n  Press Enter to start… ")
-  (flush-output)
-  (void (read-line))
+  ;; Offer the choice only when there is one; a single-board run keeps the
+  ;; original bare prompt.
+  (cond
+    [(> (length boards) 1)
+     (printf "\n  boards: ~a\n"
+             (string-join (for/list ([b (in-list boards)] [i (in-naturals)])
+                            (format "[~a] ~a" (add1 i) (car b)))
+                          "   "))
+     (printf "  Press Enter to start, or a number then Enter to switch board… ")
+     (flush-output)
+     (define answer (read-line))
+     (define pick (and (string? answer) (string->number (string-trim answer))))
+     (when (and pick (exact-integer? pick) (<= 1 pick (length boards)))
+       (set-box! idx (sub1 pick))
+       (set! c (make-cabinet (cdr (list-ref boards (unbox idx)))))
+       (prime! c)
+       (paint!))]
+    [else
+     (printf "\n  Press Enter to start… ")
+     (flush-output)
+     (void (read-line))])
   (let loop ()
     (for ([_ (in-range speed)] #:break (cab-done? c))
       (tick! c ai-joystick))
@@ -263,17 +301,38 @@
 (define (cell-x x) (+ (* x CELL) (quotient CELL 2)))
 (define (cell-y y) (+ (* y CELL) (quotient CELL 2)))
 
+;; The immediate operand of the instruction at `ip`. Constants CANNOT be read
+;; from fixed operand cells: the generator emits `li k` as any of `add #0,#k`,
+;; `add #k,#0`, `mul #k,#1`, `mul #1,#k`, so which slot holds `k` varies per
+;; user even though the instruction addresses do not. When both operands are
+;; immediate, the constant is the one that isn't the operation's identity
+;; element — which is what makes the templates interchangeable. See
+;; day13_disassembly.md, "What changes between users' inputs".
+(define (imm-operand program ip)
+  (define instr (vector-ref program ip))
+  (define identity (if (= 2 (modulo instr 100)) 1 0))
+  (define (mode n) (modulo (quotient instr (* 100 (expt 10 (sub1 n)))) 10))
+  (define (arg n) (vector-ref program (+ ip n)))
+  (cond
+    [(and (= 1 (mode 1)) (= 1 (mode 2)))
+     (if (= (arg 1) identity) (arg 2) (arg 1))]
+    [(= 1 (mode 1)) (arg 1)]
+    [else (arg 2)]))
+
 ;; Blocks coloured by the point value the disassembly recovered from the
-;; program's hidden table: slot(x,y) = tbase + ((25x + y)*a + c) mod m.
-;; Cheap tiles cold, expensive tiles hot — the score map made visible while
-;; you play it. See day13_disassembly.md, "The hidden score map".
+;; program's hidden table: slot(x,y) = tbase + ((colmul*x + y)*a + c) mod m,
+;; every constant pulled out of the instruction that loads it. Cheap tiles
+;; cold, expensive tiles hot — the score map made visible while you play it.
+;; See day13_disassembly.md, "The hidden score map".
 (define (heat-palette program)
-  (define (const a) (vector-ref program a))
+  (define tbase  (imm-operand program 630))
+  (define colmul (imm-operand program 603))
+  (define a      (imm-operand program 611))
+  (define c      (imm-operand program 615))
+  (define m      (imm-operand program 619))
   (lambda (x y)
-    (define slot (+ (const 632)
-                    (modulo (+ (* (+ (* (const 604) x) y) (const 613)) (const 616))
-                            (const 621))))
-    (define v (vector-ref program slot))            ; 1..98
+    (define v (vector-ref program
+                          (+ tbase (modulo (+ (* (+ (* colmul x) y) a) c) m))))
     (make-color (min 255 (+ 40 (* 2 v))) 60 (max 0 (- 220 (* 2 v))))))
 
 ;; Walls + blocks, composed once and flattened to a bitmap.
@@ -289,10 +348,11 @@
 ;; One frame: the cached background bitmap plus the two sprites, optionally
 ;; under a banner. Hoisted out of `run-window` so a headless script can
 ;; snapshot frames to PNG without opening a window.
-(define (frame-image c bg [banner #f])
+(define (frame-image c bg paddle-row [banner #f])
   (define board
     (place-image (cell-image 4 #f) (cell-x (cab-ball c)) (cell-y (cab-bally c))
-                 (place-image (cell-image 3 #f) (cell-x (cab-paddle c)) (cell-y 23)
+                 (place-image (cell-image 3 #f) (cell-x (cab-paddle c))
+                              (cell-y paddle-row)
                               bg)))
   (cond
     [(not banner) board]
@@ -308,26 +368,43 @@
 
 (provide cell-image cell-x cell-y build-background heat-palette frame-image CELL)
 
-(define (run-window program #:human? [human? #f] #:speed [speed 2]
+;; `boards` is a list of (label . program): the window opens on the first and
+;; the number keys switch between them from the start screen. Board geometry is
+;; per-program (40x25 and 45x24 are both real), so W/H/paddle-row are recomputed
+;; on every load rather than closed over once.
+(define (run-window boards #:human? [human? #f] #:speed [speed 2]
                     #:fps [fps 30] #:heat? [heat? #f])
-  (define W 40) (define H 25)
-  (define palette (and heat? (heat-palette program)))
   (define bg (box #f))
+  (define geom (box '(40 25 23)))        ; W, H, paddle-row for the loaded board
+  (define label (box ""))
+  (define idx (box 0))
   (define stick (box 0))                 ; the human's current key direction
   (define auto? (box (not human?)))
+  (define started? (box #f))             ; the opening board holds until a key
+  (define quit? (box #f))                ; the ONLY thing that stops big-bang
   ;; Every broken block patches the cached background: draw an empty cell over
   ;; it and re-freeze. Ball/paddle updates are ignored here — they are sprites.
   (define (on-draw x y new old)
     (when (and (equal? old 2) (= new 0) (unbox bg))
       (set-box! bg (freeze (place-image (cell-image 0 #f) (cell-x x) (cell-y y)
                                         (unbox bg))))))
-  (define c (make-cabinet program #:on-draw on-draw))
-  (define started? (box #f))             ; the opening board holds until a key
-  (define quit? (box #f))                ; the ONLY thing that stops big-bang
-  ;; Absorb the opening repaint and flatten it into the cached background
-  ;; before the window opens, so the first thing shown is the full board.
-  (prime! c)
-  (set-box! bg (build-background (cab-screen c) palette W H))
+  ;; Load board `i` and return its cabinet, primed and paused: absorb the
+  ;; opening repaint, measure the board from it, and flatten walls + blocks
+  ;; into the cached background before anything is shown.
+  (define (load-board i)
+    (define program (cdr (list-ref boards i)))
+    (define c (make-cabinet program #:on-draw on-draw))
+    (set-box! bg #f)                     ; suppress patching during the repaint
+    (prime! c)
+    (define-values (W H paddle-row) (screen-geometry c))
+    (set-box! geom (list W H paddle-row))
+    (set-box! idx i)
+    (set-box! label (car (list-ref boards i)))
+    (set-box! started? #f)
+    (set-box! stick 0)
+    (set-box! auto? (not human?))
+    (set-box! bg (build-background (cab-screen c) (and heat? (heat-palette program)) W H))
+    c)
   (define (joystick c) (if (unbox auto?) (ai-joystick c) (unbox stick)))
   (define (advance c)
     (when (unbox started?)
@@ -346,24 +423,43 @@
               (if (zero? (blocks-left c))
                   "CLEARED — [q] or close the window to quit"
                   "BALL MISSED — [q] or close the window to quit")]
-             [(not (unbox started?)) "press any key to start"]
+             [(not (unbox started?)) (start-screen-help)]
              [(unbox auto?) "[a] you play   [q] quit          tracking controller"]
              [else "[<-] [->] move   [a] autopilot   [q] quit"])
            12 "gray")))
-  (define blank (empty-scene (* W CELL) (* H CELL) "black"))
-  (define (draw c) (frame-image c (or (unbox bg) blank) (banner c)))
+  ;; On the start screen the number keys pick the board, so say so — and show
+  ;; which one is loaded, since the boards differ in size and block count.
+  (define (start-screen-help)
+    (define choices
+      (for/list ([b (in-list boards)] [i (in-naturals)])
+        (format "[~a] ~a~a" (add1 i) (car b) (if (= i (unbox idx)) " *" ""))))
+    (string-append "board: " (string-join choices "   ")
+                   "     press space to start"))
+  (define (draw c)
+    (match-define (list W H paddle-row) (unbox geom))
+    (frame-image c
+                 (or (unbox bg) (empty-scene (* W CELL) (* H CELL) "black"))
+                 paddle-row
+                 (banner c)))
   (define (key c k)
-    (set-box! started? #t)               ; any key starts the game
+    (define pick                          ; "1".."9" -> board index, else #f
+      (for/first ([i (in-range (length boards))]
+                  #:when (key=? k (number->string (add1 i))))
+        i))
     (cond
-      [(key=? k "left")  (set-box! stick -1) (set-box! auto? #f) c]
-      [(key=? k "right") (set-box! stick  1) (set-box! auto? #f) c]
-      [(key=? k "a")     (set-box! auto? (not (unbox auto?))) c]
+      ;; Board selection only makes sense before the game starts; once running,
+      ;; a stray number key must not silently restart a game in progress.
+      [(and pick (not (unbox started?))) (load-board pick)]
+      [(key=? k "left")  (set-box! started? #t) (set-box! stick -1) (set-box! auto? #f) c]
+      [(key=? k "right") (set-box! started? #t) (set-box! stick  1) (set-box! auto? #f) c]
+      [(key=? k "a")     (set-box! started? #t) (set-box! auto? (not (unbox auto?))) c]
       [(key=? k "q")     (set-box! quit? #t) c]
-      [else c]))
+      [else (set-box! started? #t) c]))
   (define (release c k)
     (when (or (key=? k "left") (key=? k "right")) (set-box! stick 0))
     c)
-  (big-bang c
+  (define final
+   (big-bang (load-board 0)
     [on-tick advance (/ 1.0 fps)]
     [to-draw draw]
     [on-key key]
@@ -378,12 +474,14 @@
     ;; out is an explicit quit — the GUI equivalent of the terminal's
     ;; "Press Enter to exit…".
     [stop-when (lambda (_) (unbox quit?)) draw]
-    [name "AoC 2019 Day 13 — Care Package"])
-  (printf "~a  final score ~a after ~a ticks.\n"
-          (cond [(cab-wedged? c) "CABINET WEDGED —"]
-                [(zero? (blocks-left c)) "CLEARED."]
+    [name "AoC 2019 Day 13 — Care Package"]))
+  ;; big-bang hands back the final world, which is the cabinet last loaded —
+  ;; the right one to report on even if the board was switched at the start.
+  (printf "~a (~a)  final score ~a after ~a ticks.\n"
+          (cond [(cab-wedged? final) "CABINET WEDGED —"]
+                [(zero? (blocks-left final)) "CLEARED."]
                 [else "Ball missed —"])
-          (cab-score c) (cab-ticks c)))
+          (unbox label) (cab-score final) (cab-ticks final)))
 
 ;; ===========================================================================
 
@@ -408,12 +506,34 @@
      [("--fps") n "frames per second (0 = as fast as possible)"
                 (set-box! fps (string->number n))]
      #:args ([input #f])
-     (or input (build-path here 'up "inputs" "day13.txt"))))
-  (define program (d05:parse-input (file->string path)))
+     input))
+  ;; With no argument, offer every day13 board sitting in inputs/ —
+  ;; `day13.txt` plus anything like `day13_alt.txt` (a second user's program,
+  ;; on a 45x24 board instead of 40x25; see the disassembly's "What changes
+  ;; between users' inputs"). Sorted so the puzzle's own input is board 1.
+  (define input-dir (build-path here 'up "inputs"))
+  (define (label-of p) (regexp-replace #rx"\\.txt$" (path->string p) ""))
+  (define board-paths
+    (cond
+      [path (list (string->path path))]
+      [else
+       (define found
+         (sort (for/list ([p (in-list (directory-list input-dir))]
+                          #:when (regexp-match? #rx"^day13.*\\.txt$" (path->string p)))
+                 p)
+               (lambda (a b) (< (string-length (path->string a))
+                                (string-length (path->string b))))))
+       (for/list ([p (in-list found)]) (build-path input-dir p))]))
+  (when (null? board-paths)
+    (error 'day13_arcade "no day13*.txt found in ~a" input-dir))
+  (define boards
+    (for/list ([p (in-list board-paths)])
+      (cons (label-of (file-name-from-path p))
+            (d05:parse-input (file->string p)))))
   ;; A human needs the ball to move at human speed; the AI can be watched a
   ;; little faster. Override either with --speed.
   (define ticks/frame (or (unbox speed) (if (unbox human?) 1 2)))
   (case (unbox mode)
-    [(terminal) (run-terminal program #:fps (unbox fps) #:speed ticks/frame)]
-    [else (run-window program #:human? (unbox human?) #:speed ticks/frame
+    [(terminal) (run-terminal boards #:fps (unbox fps) #:speed ticks/frame)]
+    [else (run-window boards #:human? (unbox human?) #:speed ticks/frame
                       #:fps (unbox fps) #:heat? (unbox heat?))]))

@@ -686,7 +686,21 @@ racket scripts/day13_arcade.rkt              # a window, the AI plays
 racket scripts/day13_arcade.rkt --human      # a window, YOU play (arrow keys)
 racket scripts/day13_arcade.rkt --terminal   # ANSI animation in the console
 racket scripts/day13_arcade.rkt --heat       # colour blocks by their point value
+racket scripts/day13_arcade.rkt path/to.txt  # one specific board
 ```
+
+With no path it offers every `inputs/day13*.txt` it finds, so a second user's
+program sits alongside this one: number keys pick the board on the window's
+start screen, or type a number at the terminal's prompt. That is not a cosmetic
+feature — the two boards are **different sizes** (40×25 and 45×24), which broke
+two things worth naming. The window had `W`/`H` and the paddle row hardcoded;
+they now come from `screen-geometry`, which measures the board off the *opening
+frame* rather than the code, since the repaint `prime!` absorbs draws every cell
+exactly once and therefore already knows how big the board is and where the
+paddle sits. And `--heat` read the hash constants from fixed operand cells,
+which silently yields the wrong table on any other input — see
+[the disassembly](day13_disassembly.md#what-changes-between-users-inputs) for
+why, and `imm-operand` for the fix.
 
 Both peripherals open on the **starting board and wait** — any key in the
 window, Enter in the terminal — and both hold the **final frame** until they're
