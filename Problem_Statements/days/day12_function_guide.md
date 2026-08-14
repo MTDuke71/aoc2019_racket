@@ -1,5 +1,11 @@
 # Day 12 — The N-Body Problem (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day12.rkt](../../src/day12.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > Four moons, each with a 3-D position and velocity. Every time step,
 > gravity nudges each velocity component by ±1 toward every other moon, then
 > every position moves by its velocity. Part 1 asks for the total energy

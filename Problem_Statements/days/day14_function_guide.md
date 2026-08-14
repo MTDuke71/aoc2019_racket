@@ -1,5 +1,11 @@
 # Day 14 — Space Stoichiometry (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day14.rkt](../../src/day14.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > A nanofactory recipe book. Every line is `3 A, 4 B => 1 AB`; exactly one
 > reaction produces each chemical except `ORE`, the raw input. Part 1 asks
 > the ORE cost of 1 FUEL; Part 2 asks how much FUEL a trillion ORE buys. The

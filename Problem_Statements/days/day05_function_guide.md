@@ -1,5 +1,11 @@
 # Day 5 — Sunny with a Chance of Asteroids (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day05.rkt](../../src/day05.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The Intcode thread resumes. [Day 2](day02_function_guide.md) built a
 > three-opcode adder; Day 5 grows it into a real little CPU with
 > **parameter modes**, **I/O**, and **conditional control flow**. The

@@ -72,9 +72,9 @@ def part2_affine(program: list[int]) -> int:
     That is an empirical property of the input, not a guarantee of the
     opcode set — see the function guide for the caveat.
     """
-    base = run_with(program, 0, 0)          # constant term
-    a = run_with(program, 1, 0) - base      # d(output)/d(noun)
-    b = run_with(program, 0, 1) - base      # d(output)/d(verb), usually 1
+    base = run_with(program, 0, 0)  # constant term
+    a = run_with(program, 1, 0) - base  # d(output)/d(noun)
+    b = run_with(program, 0, 1) - base  # d(output)/d(verb), usually 1
     noun, rem = divmod(TARGET - base, a)
     verb = rem // b
     return 100 * noun + verb

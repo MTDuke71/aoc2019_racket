@@ -1,5 +1,11 @@
 # Day 10 — Monitoring Station (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day10.rkt](../../src/day10.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The first **lattice-geometry day** of 2019 — and the Intcode VM
 > ([Day 9](day09_function_guide.md)) sits this one out entirely. Both
 > parts hinge on a single number-theory fact: the direction from one grid

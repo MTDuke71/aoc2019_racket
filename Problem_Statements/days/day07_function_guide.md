@@ -1,5 +1,11 @@
 # Day 7 — Amplification Circuit (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day07.rkt](../../src/day07.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > Five copies of the [Day 5](day05_function_guide.md) Intcode program run
 > as amplifiers. Each copy reads its phase setting (0–4 or 5–9) and then
 > input signals; outputs chain A→E (Part 1) or loop E→A (Part 2). The

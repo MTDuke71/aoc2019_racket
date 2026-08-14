@@ -53,21 +53,27 @@ def run_inputs(program: list[int], inputs: list[int]) -> list[int]:
             return ref(ip + n)
 
         if op == 1:
-            store(addr(3), val(1) + val(2)); ip += 4
+            store(addr(3), val(1) + val(2))
+            ip += 4
         elif op == 2:
-            store(addr(3), val(1) * val(2)); ip += 4
+            store(addr(3), val(1) * val(2))
+            ip += 4
         elif op == 3:
-            store(addr(1), pending.pop(0)); ip += 2
+            store(addr(1), pending.pop(0))
+            ip += 2
         elif op == 4:
-            outs.append(val(1)); ip += 2
+            outs.append(val(1))
+            ip += 2
         elif op == 5:
             ip = val(2) if val(1) else ip + 3
         elif op == 6:
             ip = val(2) if not val(1) else ip + 3
         elif op == 7:
-            store(addr(3), int(val(1) < val(2))); ip += 4
+            store(addr(3), int(val(1) < val(2)))
+            ip += 4
         elif op == 8:
-            store(addr(3), int(val(1) == val(2))); ip += 4
+            store(addr(3), int(val(1) == val(2)))
+            ip += 4
         elif op == 99:
             return outs
         else:
@@ -102,7 +108,10 @@ def thruster_feedback(program: list[int], phases: list[int]) -> int:
         ip = ips[i]
 
         def do() -> str:
-            nonlocal ip
+            # `thruster` as well as `ip`: without this, `thruster = out` below
+            # would bind a fresh local in `do` and the final value would never
+            # reach thruster_feedback, which returned None on every permutation.
+            nonlocal ip, thruster
             instr = ref(mem, ip)
             op = instr % 100
             modes = instr // 100
@@ -133,17 +142,27 @@ def thruster_feedback(program: list[int], phases: list[int]) -> int:
                     queues[i + 1].append(out)
                 return "out"
             if op == 1:
-                store(mem, addr(3), val(1) + val(2)); ip += 4; return "ran"
+                store(mem, addr(3), val(1) + val(2))
+                ip += 4
+                return "ran"
             if op == 2:
-                store(mem, addr(3), val(1) * val(2)); ip += 4; return "ran"
+                store(mem, addr(3), val(1) * val(2))
+                ip += 4
+                return "ran"
             if op == 5:
-                ip = val(2) if val(1) else ip + 3; return "ran"
+                ip = val(2) if val(1) else ip + 3
+                return "ran"
             if op == 6:
-                ip = val(2) if not val(1) else ip + 3; return "ran"
+                ip = val(2) if not val(1) else ip + 3
+                return "ran"
             if op == 7:
-                store(mem, addr(3), int(val(1) < val(2))); ip += 4; return "ran"
+                store(mem, addr(3), int(val(1) < val(2)))
+                ip += 4
+                return "ran"
             if op == 8:
-                store(mem, addr(3), int(val(1) == val(2))); ip += 4; return "ran"
+                store(mem, addr(3), int(val(1) == val(2)))
+                ip += 4
+                return "ran"
             raise ValueError(f"bad op {op} at {ip}")
 
         while True:
@@ -182,6 +201,7 @@ def part2(program: list[int]) -> int:
 
 if __name__ == "__main__":
     from pathlib import Path
+
     prog = parse_input(Path("inputs/day07.txt").read_text())
     print("part 1:", part1(prog))
     print("part 2:", part2(prog))

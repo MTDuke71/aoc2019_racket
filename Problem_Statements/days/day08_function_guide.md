@@ -1,5 +1,11 @@
 # Day 8 — Space Image Format (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day08.rkt](../../src/day08.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > A **mechanics day**, and the mechanic is *reshaping*: a flat string of
 > 15 000 digits is secretly a 3-D array — 100 **layers** of a 25×6 image,
 > filled row-major. Both parts are the same one-liner of index arithmetic

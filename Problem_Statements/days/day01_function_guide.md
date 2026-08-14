@@ -1,5 +1,11 @@
 # Day 1 — The Tyranny of the Rocket Equation (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day01.rkt](../../src/day01.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > First real AoC 2019 Racket day. Besides solving the puzzle, this day
 > sets up the **solving platform** every later day reuses, so this guide
 > spends its first section on the project skeleton and the rest on the

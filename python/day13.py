@@ -67,26 +67,40 @@ class VM:
 
         op = mem[ip] % 100
         if op == 1:
-            mem[addr(3)] = val(1) + val(2); self.ip += 4; return "ran"
+            mem[addr(3)] = val(1) + val(2)
+            self.ip += 4
+            return "ran"
         if op == 2:
-            mem[addr(3)] = val(1) * val(2); self.ip += 4; return "ran"
+            mem[addr(3)] = val(1) * val(2)
+            self.ip += 4
+            return "ran"
         if op == 3:
             if not self.inputs:
                 return "blocked"
-            mem[addr(1)] = self.inputs.pop(0); self.ip += 2; return "ran"
+            mem[addr(1)] = self.inputs.pop(0)
+            self.ip += 2
+            return "ran"
         if op == 4:
             self.ip += 2
             return ("output", val(1))
         if op == 5:
-            self.ip = val(2) if val(1) else ip + 3; return "ran"
+            self.ip = val(2) if val(1) else ip + 3
+            return "ran"
         if op == 6:
-            self.ip = val(2) if not val(1) else ip + 3; return "ran"
+            self.ip = val(2) if not val(1) else ip + 3
+            return "ran"
         if op == 7:
-            mem[addr(3)] = int(val(1) < val(2)); self.ip += 4; return "ran"
+            mem[addr(3)] = int(val(1) < val(2))
+            self.ip += 4
+            return "ran"
         if op == 8:
-            mem[addr(3)] = int(val(1) == val(2)); self.ip += 4; return "ran"
+            mem[addr(3)] = int(val(1) == val(2))
+            self.ip += 4
+            return "ran"
         if op == 9:
-            self.rb += val(1); self.ip += 2; return "ran"
+            self.rb += val(1)
+            self.ip += 2
+            return "ran"
         if op == 99:
             self.halted = True
             return "halted"
@@ -163,7 +177,7 @@ def play(program: list[int], quarters: int | None = 2) -> int:
 
     for x, y, tile in commands(vm, lambda: (ball > paddle) - (ball < paddle)):
         if (x, y) == (-1, 0):
-            score = tile          # the sentinel triple carries a score, not a tile
+            score = tile  # the sentinel triple carries a score, not a tile
         elif tile == BALL:
             ball = x
         elif tile == PADDLE:

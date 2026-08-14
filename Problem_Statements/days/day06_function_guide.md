@@ -1,5 +1,11 @@
 # Day 6 — Universal Orbit Map (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day06.rkt](../../src/day06.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The first **graph day** of 2019 — except it's not a general graph, and
 > seeing why is the whole puzzle. Every object orbits *exactly one* other
 > object, so the map is a **rooted tree** (root: `COM`), storable as

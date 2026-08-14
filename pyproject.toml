@@ -1,0 +1,26 @@
+# AoC 2019 -- Python tooling.
+#
+# The repo is named ...\_racket for historical reasons; see README.md. Racket
+# under src/, test/, bench/, scripts/ and tutorial/ is FROZEN. Nothing here may
+# reach it -- note the `include` under [tool.ruff].
+
+[tool.pytest.ini_options]
+# testpaths: bare `pytest` finds the suite without arguments.
+# pythonpath: puts python/ on sys.path for the whole session, which is what lets
+#   a test module say `import day03` with no package layout, no __init__.py and
+#   no sys.path juggling in conftest.
+testpaths = ["python/tests"]
+pythonpath = ["python"]
+# -rs prints the reason for every skip. Both of conftest.py's fixtures signal
+# through skips (missing input, unlocked answer), and a silent skip is exactly
+# the failure mode they exist to prevent.
+addopts = "-rs"
+
+[tool.ruff]
+line-length = 110
+# The formatter is fenced into python/. Without this, `ruff format .` from the
+# repo root would happily rewrite anything it recognised elsewhere in the tree.
+include = ["python/**/*.py"]
+
+[tool.ruff.format]
+quote-style = "double"

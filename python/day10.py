@@ -28,10 +28,7 @@ from collections import defaultdict
 
 
 def parse_input(text: str) -> list[tuple[int, int]]:
-    return [(x, y)
-            for y, row in enumerate(text.split())
-            for x, ch in enumerate(row)
-            if ch == "#"]
+    return [(x, y) for y, row in enumerate(text.split()) for x, ch in enumerate(row) if ch == "#"]
 
 
 def direction(dx: int, dy: int) -> tuple[int, int]:
@@ -55,8 +52,7 @@ def part1(asteroids: list[tuple[int, int]]) -> int:
     return best(asteroids)[1]
 
 
-def vaporization_order(station: tuple[int, int],
-                       asteroids: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def vaporization_order(station: tuple[int, int], asteroids: list[tuple[int, int]]) -> list[tuple[int, int]]:
     sx, sy = station
 
     def dist2(a):
@@ -73,20 +69,21 @@ def vaporization_order(station: tuple[int, int],
             groups[direction(a[0] - sx, a[1] - sy)].append(a)
 
     # each ray sorted near->far; rays ordered by clockwise angle
-    rays = [sorted(members, key=dist2)
-            for _, members in sorted(groups.items(), key=lambda kv: angle(kv[1][0]))]
+    rays = [
+        sorted(members, key=dist2) for _, members in sorted(groups.items(), key=lambda kv: angle(kv[1][0]))
+    ]
 
     order = []
     while any(rays):
         for ray in rays:
             if ray:
-                order.append(ray.pop(0))   # nearest on this bearing dies this rotation
+                order.append(ray.pop(0))  # nearest on this bearing dies this rotation
     return order
 
 
 def part2(asteroids: list[tuple[int, int]]) -> int:
     station, _ = best(asteroids)
-    x, y = vaporization_order(station, asteroids)[199]   # the 200th
+    x, y = vaporization_order(station, asteroids)[199]  # the 200th
     return 100 * x + y
 
 

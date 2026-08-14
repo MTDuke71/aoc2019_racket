@@ -28,6 +28,7 @@ TRILLION = 1_000_000_000_000
 
 # --------------------------------------------------------------- parsing
 
+
 def parse_input(text: str) -> dict[str, tuple[int, list[tuple[int, str]]]]:
     """`3 A, 4 B => 1 AB` -> {"AB": (1, [(3, "A"), (4, "B")])}."""
 
@@ -46,6 +47,7 @@ def parse_input(text: str) -> dict[str, tuple[int, list[tuple[int, str]]]]:
 
 
 # ------------------------------------------------------ topological sort
+
 
 def topo_order(reactions) -> list[str]:
     """Chemicals ordered so every consumer precedes what it consumes.
@@ -78,6 +80,7 @@ def topo_order(reactions) -> list[str]:
 
 # ----------------------------------------------------------- the solver
 
+
 def ore_for(reactions, fuel: int) -> int:
     """ORE needed for `fuel` FUEL.
 
@@ -93,7 +96,7 @@ def ore_for(reactions, fuel: int) -> int:
         if n <= 0 or c not in reactions:
             continue
         per, ins = reactions[c]
-        runs = -(-n // per)          # ceiling division
+        runs = -(-n // per)  # ceiling division
         for qty, chem in ins:
             need[chem] += runs * qty
     return need["ORE"]
@@ -113,7 +116,7 @@ def part2(reactions, budget: int = TRILLION) -> int:
     hi = 2 * lo
     while ore_for(reactions, hi) <= budget:
         hi *= 2
-    while hi - lo > 1:                     # invariant: lo affordable, hi not
+    while hi - lo > 1:  # invariant: lo affordable, hi not
         mid = (lo + hi) // 2
         if ore_for(reactions, mid) <= budget:
             lo = mid
@@ -125,20 +128,29 @@ def part2(reactions, budget: int = TRILLION) -> int:
 # ------------------------------------------------------------- examples
 
 EXAMPLES = [
-    ("""10 ORE => 10 A
+    (
+        """10 ORE => 10 A
 1 ORE => 1 B
 7 A, 1 B => 1 C
 7 A, 1 C => 1 D
 7 A, 1 D => 1 E
-7 A, 1 E => 1 FUEL""", 31, None),
-    ("""9 ORE => 2 A
+7 A, 1 E => 1 FUEL""",
+        31,
+        None,
+    ),
+    (
+        """9 ORE => 2 A
 8 ORE => 3 B
 7 ORE => 5 C
 3 A, 4 B => 1 AB
 5 B, 7 C => 1 BC
 4 C, 1 A => 1 CA
-2 AB, 3 BC, 4 CA => 1 FUEL""", 165, None),
-    ("""157 ORE => 5 NZVS
+2 AB, 3 BC, 4 CA => 1 FUEL""",
+        165,
+        None,
+    ),
+    (
+        """157 ORE => 5 NZVS
 165 ORE => 6 DCFZ
 44 XJWVT, 5 KHKGT, 1 QDVJ, 29 NZVS, 9 GPVTF, 48 HKGWZ => 1 FUEL
 12 HKGWZ, 1 GPVTF, 8 PSHF => 9 QDVJ
@@ -146,8 +158,12 @@ EXAMPLES = [
 177 ORE => 5 HKGWZ
 7 DCFZ, 7 PSHF => 2 XJWVT
 165 ORE => 2 GPVTF
-3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT""", 13312, 82892753),
-    ("""2 VPVL, 7 FWMGM, 2 CXFTF, 11 MNCFX => 1 STKFG
+3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT""",
+        13312,
+        82892753,
+    ),
+    (
+        """2 VPVL, 7 FWMGM, 2 CXFTF, 11 MNCFX => 1 STKFG
 17 NVRVD, 3 JNWZP => 8 VPVL
 53 STKFG, 6 MNCFX, 46 VJHF, 81 HVMC, 68 CXFTF, 25 GNMV => 1 FUEL
 22 VJHF, 37 MNCFX => 5 FWMGM
@@ -158,8 +174,12 @@ EXAMPLES = [
 145 ORE => 6 MNCFX
 1 NVRVD => 8 CXFTF
 1 VJHF, 6 MNCFX => 4 RFSQX
-176 ORE => 6 VJHF""", 180697, 5586022),
-    ("""171 ORE => 8 CNZTR
+176 ORE => 6 VJHF""",
+        180697,
+        5586022,
+    ),
+    (
+        """171 ORE => 8 CNZTR
 7 ZLQW, 3 BMBT, 9 XCVML, 26 XMNCP, 1 WPTQ, 2 MZWV, 1 RJRHP => 4 PLWSL
 114 ORE => 4 BHXH
 14 VRPVC => 6 BMBT
@@ -175,7 +195,10 @@ EXAMPLES = [
 3 BHXH, 2 VRPVC => 7 MZWV
 121 ORE => 7 VRPVC
 7 XCVML => 6 RJRHP
-5 BHXH, 4 VRPVC => 5 LTCX""", 2210736, 460664),
+5 BHXH, 4 VRPVC => 5 LTCX""",
+        2210736,
+        460664,
+    ),
 ]
 
 

@@ -1,5 +1,11 @@
 # Day 4 — Secure Container (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day04.rkt](../../src/day04.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > A palate cleanser between grids ([Day 3](day03_function_guide.md)) and the
 > Intcode thread ([Day 2](day02_function_guide.md)): a pure
 > number-theory/combinatorics filter. Count six-digit numbers in a range

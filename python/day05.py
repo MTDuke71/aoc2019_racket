@@ -24,48 +24,54 @@ def parse_input(text: str) -> list[int]:
 
 def run(program: list[int], input_value: int) -> list[int]:
     """Execute a copy of `program` with one input; return outputs in order."""
-    mem = program[:]                      # don't clobber the caller's program
+    mem = program[:]  # don't clobber the caller's program
     ip = 0
     outs: list[int] = []
 
-    def val(n: int) -> int:               # nth parameter, mode-aware
+    def val(n: int) -> int:  # nth parameter, mode-aware
         raw = mem[ip + n]
-        mode = (mem[ip] // 10 ** (n + 1)) % 10   # digit above the 2-digit opcode
+        mode = (mem[ip] // 10 ** (n + 1)) % 10  # digit above the 2-digit opcode
         return raw if mode == 1 else mem[raw]
 
-    def addr(n: int) -> int:              # write target: always position mode
+    def addr(n: int) -> int:  # write target: always position mode
         return mem[ip + n]
 
     while True:
         op = mem[ip] % 100
-        if op == 1:                       # add
-            mem[addr(3)] = val(1) + val(2); ip += 4
-        elif op == 2:                     # multiply
-            mem[addr(3)] = val(1) * val(2); ip += 4
-        elif op == 3:                     # input
-            mem[addr(1)] = input_value; ip += 2
-        elif op == 4:                     # output
-            outs.append(val(1)); ip += 2
-        elif op == 5:                     # jump-if-true
+        if op == 1:  # add
+            mem[addr(3)] = val(1) + val(2)
+            ip += 4
+        elif op == 2:  # multiply
+            mem[addr(3)] = val(1) * val(2)
+            ip += 4
+        elif op == 3:  # input
+            mem[addr(1)] = input_value
+            ip += 2
+        elif op == 4:  # output
+            outs.append(val(1))
+            ip += 2
+        elif op == 5:  # jump-if-true
             ip = val(2) if val(1) != 0 else ip + 3
-        elif op == 6:                     # jump-if-false
+        elif op == 6:  # jump-if-false
             ip = val(2) if val(1) == 0 else ip + 3
-        elif op == 7:                     # less than
-            mem[addr(3)] = 1 if val(1) < val(2) else 0; ip += 4
-        elif op == 8:                     # equals
-            mem[addr(3)] = 1 if val(1) == val(2) else 0; ip += 4
-        elif op == 99:                    # halt
+        elif op == 7:  # less than
+            mem[addr(3)] = 1 if val(1) < val(2) else 0
+            ip += 4
+        elif op == 8:  # equals
+            mem[addr(3)] = 1 if val(1) == val(2) else 0
+            ip += 4
+        elif op == 99:  # halt
             return outs
         else:
             raise ValueError(f"unknown opcode {op} at position {ip}")
 
 
 def part1(program: list[int]) -> int:
-    return run(program, 1)[-1]            # system ID 1; diagnostic = last output
+    return run(program, 1)[-1]  # system ID 1; diagnostic = last output
 
 
 def part2(program: list[int]) -> int:
-    return run(program, 5)[-1]            # system ID 5
+    return run(program, 5)[-1]  # system ID 5
 
 
 if __name__ == "__main__":

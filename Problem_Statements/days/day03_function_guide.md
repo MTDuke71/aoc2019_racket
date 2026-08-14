@@ -1,5 +1,11 @@
 # Day 3 — Crossed Wires (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day03.rkt](../../src/day03.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > Two wires snake across a grid from a shared origin; we want their
 > crossings under two different cost functions. The day's real lesson is
 > the **spatial hash** — rasterize each path into a `point -> step` map and

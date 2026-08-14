@@ -27,3 +27,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Python tooling (Windows venv: executables land in .venv\Scripts\, not bin/)
+.venv/
+.pytest_cache/
+.ruff_cache/

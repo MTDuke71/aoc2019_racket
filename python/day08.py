@@ -26,7 +26,7 @@ def parse_input(text: str) -> list[int]:
 def image_layers(digits: list[int], width: int, height: int) -> list[list[int]]:
     """Chop the flat list into width*height-pixel layers."""
     size = width * height
-    return [digits[i:i + size] for i in range(0, len(digits), size)]
+    return [digits[i : i + size] for i in range(0, len(digits), size)]
 
 
 def part1(digits: list[int], width: int, height: int) -> int:
@@ -41,7 +41,7 @@ def decode_image(digits: list[int], width: int, height: int) -> list[int]:
     layers = image_layers(digits, width, height)
     pixels = []
     for p in range(size):
-        for layer in layers:               # front (layer 0) to back
+        for layer in layers:  # front (layer 0) to back
             if layer[p] != 2:
                 pixels.append(layer[p])
                 break
@@ -51,8 +51,7 @@ def decode_image(digits: list[int], width: int, height: int) -> list[int]:
 def render(pixels: list[int], width: int, height: int) -> str:
     """Flat pixel list -> printable block ('#' lit, ' ' dark)."""
     return "\n".join(
-        "".join("#" if pixels[r * width + c] == 1 else " " for c in range(width))
-        for r in range(height)
+        "".join("#" if pixels[r * width + c] == 1 else " " for c in range(width)) for r in range(height)
     )
 
 

@@ -28,10 +28,7 @@ from math import lcm
 
 def parse_input(text: str) -> list[tuple[int, int, int]]:
     """One (x, y, z) per line of `<x=3, y=3, z=0>`; just grab the integers."""
-    return [
-        tuple(int(n) for n in re.findall(r"-?\d+", line))
-        for line in text.strip().splitlines()
-    ]
+    return [tuple(int(n) for n in re.findall(r"-?\d+", line)) for line in text.strip().splitlines()]
 
 
 def sgn(n: int) -> int:
@@ -68,10 +65,7 @@ def simulate(moons: list[tuple[int, int, int]], steps: int):
 def total_energy(positions, velocities) -> int:
     """Potential (sum |position|) x kinetic (sum |velocity|), per moon. The
     only place the three axes are ever combined."""
-    return sum(
-        sum(abs(c) for c in p) * sum(abs(c) for c in v)
-        for p, v in zip(positions, velocities)
-    )
+    return sum(sum(abs(c) for c in p) * sum(abs(c) for c in v) for p, v in zip(positions, velocities))
 
 
 def part1(moons: list[tuple[int, int, int]], steps: int = 1000) -> int:

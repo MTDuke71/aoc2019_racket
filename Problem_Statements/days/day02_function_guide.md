@@ -1,5 +1,11 @@
 # Day 2 — 1202 Program Alarm (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day02.rkt](../../src/day02.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The first **Intcode** day, and the start of AoC 2019's defining
 > meta-problem: a tiny virtual machine that Days 2, 5, 7, and 9 grow into
 > a full computer. This guide spends real time on the *interpreter

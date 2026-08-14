@@ -1,5 +1,11 @@
 # Day 9 — Sensor Boost (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day09.rkt](../../src/day09.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The **Intcode finale**. [Day 2](day02_function_guide.md) was a three-opcode
 > adder, [Day 5](day05_function_guide.md) grew it into a CPU with parameter
 > modes and control flow, [Day 7](day07_function_guide.md) ran five copies in

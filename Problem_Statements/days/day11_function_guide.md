@@ -1,5 +1,11 @@
 # Day 11 — Space Police (function guide)
 
+> **Historical note.** This guide annotates the frozen Racket solution
+> ([src/day11.rkt](../../src/day11.rkt)), written when this repo was the
+> Racket leg of a language rotation. The repo is Python-only now and the
+> Racket is frozen, not deleted -- see the [README](../../README.md). The
+> guide is left as it was and remains accurate about the code it describes.
+
 > The Intcode VM ([Day 9](day09_function_guide.md)) comes back as a
 > **hull-painting robot**, and it's the first Intcode day where the program's
 > own output feeds back into its own next input: it reads the color of the
