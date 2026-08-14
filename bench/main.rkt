@@ -27,7 +27,8 @@
          (prefix-in d10:  "../src/day10.rkt")
          (prefix-in d11:  "../src/day11.rkt")
          (prefix-in d12:  "../src/day12.rkt")
-         (prefix-in d13:  "../src/day13.rkt"))
+         (prefix-in d13:  "../src/day13.rkt")
+         (prefix-in d14:  "../src/day14.rkt"))
 
 ;; Mean wall-clock milliseconds for `thunk`, averaged over `iters` runs.
 (define (bench-ms thunk #:iters [iters 100000])
@@ -125,6 +126,16 @@
 ;; iterations keeps the mean stable without minutes of bench time.
 (bench-day "13" (read-day-input 13) d13:parse-input d13:part1 d13:part2
            #:iters 20)
+
+;; Day 14 is the first non-Intcode day in a while and the cheapest of the
+;; recent run. Part 1 is one topological sort plus one linear demand sweep
+;; over 64 chemicals — tens of microseconds. Part 2 is 25 `ore-for`
+;; evaluations (the doubling phase plus ~23 bisection steps), so it lands
+;; almost exactly 25x Part 1 — a nice visible confirmation that the binary
+;; search costs exactly what the log2 of the bracket says it does.
+;; 2000 iterations gives a stable mean.
+(bench-day "14" (read-day-input 14) d14:parse-input d14:part1 d14:part2
+           #:iters 2000)
 
 ;; The optimized variant (src/day03a.rkt) is a TRACE-ONCE restructure, and
 ;; that win only shows at solve granularity: the idiomatic solve runs part1
