@@ -32,3 +32,8 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+
+# Rendered Day 15 maps (python/day15_map.py). Derived from a puzzle input,
+# so kept out of the repo alongside inputs/*.txt and the full Intcode listings.
+# Regenerate locally:  python python/day15_map.py
+maps/
