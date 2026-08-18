@@ -408,6 +408,15 @@ understand the program rather than merely read it.
 Five passes: descent with subroutine discovery, memory map, static map
 recovery, static dust recovery, cross-check against the live machine.
 
+For a single continuous listing to read beside this guide -- every cell of
+the image in address order, minimally annotated -- generate the companion
+file (gitignored, as all full listings are, because the raw cells republish
+the puzzle input):
+
+```
+.venv\Scripts\python.exe python\day17_disasm.py --full > Problem_Statements\days\day17_listing.md
+```
+
 Nothing is hardcoded to one user's file. The width and height are read from the
 renderer's two compare immediates, the table bases from the bootstrap's
 initialising immediates, the robot's start from the three cells the renderer

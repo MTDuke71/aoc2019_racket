@@ -619,3 +619,19 @@ def test_the_parser_not_the_interpreter_forbids_nesting(real_input):
             out.append(result[1])
     text = "".join(chr(v) for v in out if v < 128)
     assert "Expected R, L, or distance but got: A" in text
+
+
+def test_full_listing_accounts_for_every_cell(real_input):
+    """The --full listing is continuous: all 1481 cells, each exactly once.
+
+    `full_listing` raises if any cell goes unlisted (or if the string-table
+    walk derails), so calling it IS the coverage assertion; the spot checks
+    below pin the rendering of one line from each kind of region.
+    """
+    text = day17_disasm.full_listing(parse_input(real_input(17)))
+    assert "0000  1 330 331 332          add  [330]=mode.a [331]=mode.b [332]=mode" in text
+    assert "interpret:" in text
+    assert '.str 6 "Main:' in text  # a length-prefixed string
+    assert "; vacuumed" in text and "; dust" in text  # the embedded counters
+    assert "; return" in text
+    assert text.count("call draw") == 6

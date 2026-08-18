@@ -404,12 +404,178 @@ def pass5(mem: list[int], view: str, dust: int) -> None:
     print(f"  part 2 static = {dust}")
 
 
+# ------------------------------------------------------- the full listing
+
+# The two counters that live embedded among the strings in the table at
+# 330..557. `full_listing` walks the table from 333 and raises if the
+# length-prefixed strings do not land exactly on these addresses and end
+# exactly at the glyph table.
+EMBEDDED_VARS = {374: "vacuumed", 438: "dust"}
+
+
+def _escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+def full_listing(mem: list[int]) -> str:
+    """The whole image, cell by cell, as one continuous annotated listing.
+
+    Layout follows the Day 13 listings (address, raw cells, assembly, terse
+    comment); the analysis lives in day17_disassembly.md and this file is the
+    evidence for it, in address order. Every cell of the image appears exactly
+    once -- asserted, not hoped.
+    """
+    calls = call_sites(mem)
+    listing = descend(
+        mem,
+        [0, *(t for t, _ in calls.values()), *(r for _, r in calls.values())],
+    )
+
+    covered: set[int] = set()
+    lines: list[str] = []
+
+    def emit(addr: int, raw: list[int], asm: str, note: str = "") -> None:
+        cells = " ".join(str(v) for v in raw)
+        text = f"{addr:04d}  {cells:<22} {asm}"
+        lines.append(f"{text:<62}; {note}" if note else text.rstrip())
+
+    def code(lo: int, hi: int) -> None:
+        addr = lo
+        while addr <= hi:
+            if addr in SUBROUTINES:
+                lines.append("")
+                lines.append(f"{SUBROUTINES[addr].split()[0]}:")
+            text, size = listing.get(addr, (None, 0))
+            if text is None:
+                raise ValueError(f"cell {addr} in code region {lo}..{hi} is not an instruction")
+            note = ""
+            if addr in calls:
+                target, ret = calls[addr]
+                name = SUBROUTINES.get(target, str(target)).split()[0]
+                note = f"call {name} -> ret {ret}"
+            elif mem[addr : addr + 3] in ([2105, 1, 0], [2106, 0, 0]):
+                note = "return"
+            emit(addr, mem[addr : addr + size], text, note)
+            covered.update(range(addr, addr + size))
+            addr += size
+
+    def strings(lo: int, hi: int) -> None:
+        addr = lo
+        while addr <= hi:
+            if addr in EMBEDDED_VARS:
+                emit(addr, [mem[addr]], f".int {mem[addr]}", EMBEDDED_VARS[addr])
+                covered.add(addr)
+                addr += 1
+                continue
+            length = mem[addr]
+            body = mem[addr + 1 : addr + 1 + length]
+            if not (0 < length and addr + length <= hi and all(9 <= v < 127 for v in body)):
+                raise ValueError(f"cell {addr} does not start a string")
+            text = "".join(chr(v) for v in body)
+            emit(addr, [length], f'.str {length} "{_escape(text)}"')
+            covered.update(range(addr, addr + 1 + length))
+            addr += 1 + length
+
+    def table(lo: int, count: int, asm: str, note: str) -> None:
+        emit(lo, mem[lo : lo + count], asm, note)
+        covered.update(range(lo, lo + count))
+
+    def runs(lo: int, hi: int) -> None:
+        for addr in range(lo, hi + 1, 12):
+            end = min(addr + 12, hi + 1)
+            emit(addr, mem[addr:end], "")
+            covered.update(range(addr, end))
+
+    width, height = mem[WIDTH_CMP], mem[HEIGHT_CMP]
+    rle_base, bitmap_base = mem[RLE_FIRST], mem[BITMAP_BASE]
+
+    def header(title: str) -> None:
+        if lines:
+            lines.append("```")
+            lines.append("")
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append("```")
+
+    header("0000 .. 0150 — bootstrap: RLE decompressor, mode select, main-routine reader")
+    code(0, 150)
+    header("0151 .. 0188 — error paths (unreached on a valid script)")
+    code(151, 188)
+    header("0189 .. 0329 — part 2 driver: prompt, parse, interpret, report dust")
+    code(189, 329)
+    header("0330 .. 0557 — string table, with the two counters embedded in it")
+    table(330, 3, ".int 0 1 1", "mode.a mode.b mode")
+    strings(333, 557)
+    header("0558 .. 0578 — renderer tables and variables")
+    glyphs = "".join(chr(v) for v in mem[558:562])
+    table(558, 4, f'.str 4 "{glyphs}"', "glyph per heading")
+    table(562, 4, ".int " + " ".join(str(v) for v in mem[562:566]), "dx per heading")
+    table(566, 4, ".int " + " ".join(str(v) for v in mem[566:570]), "dy per heading")
+    for addr in range(570, 579):
+        emit(addr, [mem[addr]], f".int {mem[addr]}", SYMBOLS[addr])
+        covered.add(addr)
+    header("0579 .. 0621 — puts")
+    code(579, 621)
+    header("0622 .. 0785 — interpret")
+    code(622, 785)
+    header("0786 .. 0978 — draw")
+    code(786, 978)
+    header("0979 .. 1181 — parse_line")
+    code(979, 1181)
+    header(
+        f"{rle_base} .. {len(mem) - 1} — {len(mem) - rle_base} run lengths "
+        f"({width}x{height} bitmap, alternating from 0)"
+    )
+    runs(rle_base, len(mem) - 1)
+    lines.append("```")
+
+    missing = set(range(len(mem))) - covered
+    if missing:
+        raise ValueError(f"{len(missing)} cells never listed, first {sorted(missing)[:5]}")
+
+    intro = "\n".join(
+        [
+            "# Day 17 — the complete listing (`day17.txt`)",
+            "",
+            f"> All {len(mem)} integers of `inputs/day17.txt`, every one accounted for:",
+            f"> {len(listing)} instructions across the top level and four subroutines,",
+            "> then the data regions. Generated by",
+            "> [python/day17_disasm.py](../../python/day17_disasm.py) —",
+            "> `python python/day17_disasm.py --full`. Not committed: the raw cells",
+            "> republish the puzzle input (see `.gitignore`).",
+            ">",
+            "> The analysis behind the annotations is in",
+            "> [day17_disassembly.md](day17_disassembly.md); this file is the evidence",
+            "> for it, in address order. Notation: `[a]` position, `#n` immediate,",
+            "> `rb[+n]` relative; an `=name` suffix marks a known variable.",
+            "",
+            (
+                f"At run time the decompressed bitmap occupies {bitmap_base}.."
+                f"{bitmap_base + width * height - 1} and the stack starts at "
+                f"{bitmap_base + width * height}; neither is in the file."
+            ),
+            "",
+            "",
+        ]
+    )
+    return intro + "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> None:
     import sys
 
     argv = sys.argv[1:] if argv is None else argv
+    full = "--full" in argv
+    argv = [a for a in argv if a != "--full"]
     default = Path(__file__).resolve().parent.parent / "inputs" / "day17.txt"
     mem = parse_input(Path(argv[0] if argv else default).read_text())
+
+    if full:
+        # The listing carries em-dashes; a Windows console redirect defaults
+        # to cp1252 and mangles them, so pin stdout to UTF-8 first.
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(full_listing(mem), end="")
+        return
 
     listing = pass1(mem)
     pass2(mem, listing)

@@ -6,6 +6,7 @@ reference/
 # input that inputs/*.txt above deliberately keeps out of the repo. Generate
 # locally instead:
 #   racket scripts/intcode_disasm.rkt inputs/dayNN.txt --full > Problem_Statements/days/dayNN_listing.md
+#   .venv\Scripts\python.exe python\day17_disasm.py --full > Problem_Statements/days/day17_listing.md
 Problem_Statements/days/*_listing.md
 
 # Racket build artifacts
@@ -37,3 +38,7 @@ __pycache__/
 # so kept out of the repo alongside inputs/*.txt and the full Intcode listings.
 # Regenerate locally:  python python/day15_map.py
 maps/
+
+# Third-party Intcode decompiler (Rust; vendored locally for exploration).
+# Not this repo's code -- keep it out of the tree.
+intcode-disasm-master/
