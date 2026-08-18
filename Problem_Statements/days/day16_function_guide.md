@@ -536,7 +536,7 @@ day; the technique is the point.
 
 ## Tests (what is pinned and why)
 
-`python/tests/test_day16.py` — **67 tests**, one skip (Part 2 unverified).
+`python/tests/test_day16.py` — **68 tests**.
 
 | test | claim |
 |---|---|
