@@ -635,3 +635,32 @@ def test_full_listing_accounts_for_every_cell(real_input):
     assert "; vacuumed" in text and "; dust" in text  # the embedded counters
     assert "; return" in text
     assert text.count("call draw") == 6
+
+
+def test_tumbling_emits_one_farewell_x(real_input):
+    """Driving off the scaffold draws exactly one X, then halts with no dust.
+
+    The X is never data -- no cell of the program holds 88. The renderer
+    computes the off-scaffold glyph as `46 + 42 * robot_here` (the multiply-add
+    at 845/849 in the listing), and on a tumble the silent per-step probe
+    switches the video feed on for ONE farewell frame and halts without a dust
+    report. Both real runs, by contrast, emit zero X's: the robot never leaves
+    the scaffold.
+    """
+    mem = parse_input(real_input(17))
+    vm = VM(mem)
+    vm.mem[0] = 2
+    vm.inputs.extend(ord(ch) for ch in "A\nR,28\nL,1\nL,1\nn\n")
+    out = []
+    while True:
+        result = vm.step()
+        if result == "halted":
+            break
+        if isinstance(result, tuple):
+            out.append(result[1])
+
+    assert out.count(88) == 1
+    assert not [v for v in out if v > 127], "a tumble must not report dust"
+    # The X lands on (27, 16): one cell past the east end of the start row.
+    frame = "".join(chr(v) for v in out).rstrip("\n").split("\n\n")[-1]
+    assert frame.splitlines()[16][27] == "X"
