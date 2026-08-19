@@ -100,6 +100,14 @@ sentence is the whole algorithm, and it means **no search is needed**:
   you came from and the two arms of the *other* strand. Going straight is legal
   and is the only way to leave without doubling back.
 
+This is not even the first time AoC has posed the walk. **2017 Day 19,
+*A Series of Tubes*** -- solved in the Rust repo -- states the identical rule
+for its packet: "it needs to continue going the same direction, and only turn
+left or right when there's no other option." The two puzzles mirror each other
+right down to their numbers (year 17 day 19, year 19 day 17): 2017 hands you
+the grid as raw text and scores the walk itself; 2019 hides the grid inside a
+machine and makes the machine the scorer.
+
 So the rule is "**go straight as far as you can, then turn the only way you
 can**", and it is deterministic:
 
