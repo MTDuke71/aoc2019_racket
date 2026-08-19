@@ -17,15 +17,15 @@
 
 ## What is new since Day 15
 
-| | Day 15 | Day 17 |
-|---|---|---|
-| size | 70 instructions, 0–251 | 272 instructions, 933 of 1481 cells |
-| subroutines | none | **4**, with frames and an indirect return |
-| stack | none | relative base as frame pointer |
-| self-modification | one operand patch | **20**, all operand patches |
-| world data | 39×20 edge table, raw | 55×35 bitmap, **run-length encoded** |
-| input handling | one command code | ASCII parser with five error messages |
-| answers off the disk | both, as literals | Part 1 as data, **Part 2 as a formula** |
+|                      | Day 15                  | Day 17                                          |
+| -------------------- | ----------------------- | ----------------------------------------------- |
+| size                 | 70 instructions, 0–251 | 272 instructions, 933 of 1481 cells             |
+| subroutines          | none                    | **4**, with frames and an indirect return |
+| stack                | none                    | relative base as frame pointer                  |
+| self-modification    | one operand patch       | **20**, all operand patches               |
+| world data           | 39×20 edge table, raw  | 55×35 bitmap,**run-length encoded**      |
+| input handling       | one command code        | ASCII parser with five error messages           |
+| answers off the disk | both, as literals       | Part 1 as data,**Part 2 as a formula**    |
 
 The instruction set is identical — it froze at [Day 9](day09_function_guide.md).
 Everything above is built out of `add`, `mul` and `jz`.
@@ -85,12 +85,12 @@ Day 15 and unlike Day 11 (`test_static_descent_is_complete`).
 
 Twenty call sites, four subroutines:
 
-| entry | frame | what it is |
-|---:|---:|---|
-| 579 | 4 | `puts` — print the string at `rb[1]` |
-| 622 | 5 | `interpret` — run a movement program; **calls itself once** |
-| 786 | 7 | `draw` — render one frame, and vacuum the robot's cell |
-| 979 | 6 | `parse_line` — one ASCII line into the internal bytecode |
+| entry | frame | what it is                                                           |
+| ----: | ----: | -------------------------------------------------------------------- |
+|   579 |     4 | `puts` — print the string at `rb[1]`                            |
+|   622 |     5 | `interpret` — run a movement program; **calls itself once** |
+|   786 |     7 | `draw` — render one frame, and vacuum the robot's cell            |
+|   979 |     6 | `parse_line` — one ASCII line into the internal bytecode          |
 
 ---
 
@@ -156,7 +156,7 @@ supply data at all; it rewrites an opcode.
 ## Bootstrap: a run-length decoder made of patched operands
 
 ```text
-    4: arb  #3406
+    4: arb  #3406              ; arb is adjust relative base
     6: mul  #1182 #1 [15]      ; source pointer  := 1182
    10: add  #0 #1481 [24]      ; dest pointer    := 1481
    14: mul  [***] #1 [570]     ; tmp := runs[src]        <- operand at 15
@@ -208,15 +208,15 @@ plausible puzzle input and an absurd one.
 
 Everything needed to rebuild the camera picture is a literal:
 
-| what | where | value |
-|---|---|---|
-| width | immediate of `eq rb[-6] #W` at 933 | 55 |
-| height | immediate of `eq rb[-5] #H` at 946 | 35 |
-| bitmap | 299 runs at 1182 | 1925 bits |
-| robot x, y | `[576]`, `[577]` | 26, 16 |
-| robot heading | `[578]` | 0 |
-| glyphs | 558–561 | `^>v<` |
-| dx, dy | 562–565, 566–569 | `[0,1,0,-1]`, `[-1,0,1,0]` |
+| what          | where                               | value                          |
+| ------------- | ----------------------------------- | ------------------------------ |
+| width         | immediate of`eq rb[-6] #W` at 933 | 55                             |
+| height        | immediate of`eq rb[-5] #H` at 946 | 35                             |
+| bitmap        | 299 runs at 1182                    | 1925 bits                      |
+| robot x, y    | `[576]`, `[577]`                | 26, 16                         |
+| robot heading | `[578]`                           | 0                              |
+| glyphs        | 558–561                            | `^>v<`                       |
+| dx, dy        | 562–565, 566–569                  | `[0,1,0,-1]`, `[-1,0,1,0]` |
 
 `recover_view` decodes the runs, paints `#` and `.`, and drops the robot glyph
 at `(576, 577)`. The result is **byte-for-byte identical to `camera_view`**,
@@ -259,12 +259,12 @@ characters).
 
 The encoding:
 
-| token | stored as |
-|---|---:|
+| token               |     stored as |
+| ------------------- | ------------: |
 | `A`, `B`, `C` | −1, −2, −3 |
-| `R` | −4 |
-| `L` | −5 |
-| a distance | itself |
+| `R`               |           −4 |
+| `L`               |           −5 |
+| a distance          |        itself |
 
 Our grammar goes in as exactly that:
 
