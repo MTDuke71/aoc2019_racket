@@ -42,14 +42,14 @@ are accurate about it. They stay as they are.
 ```
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install pytest ruff
-.venv\Scripts\python.exe -m pip install networkx matplotlib pydot   # guide figures only (pythonviz_*.py)
+.venv\Scripts\python.exe -m pip install networkx matplotlib pydot   # guide figures only (python\viz_*.py)
 .venv\Scripts\python.exe -m pytest
 .venv\Scripts\python.exe python\bench.py 14
 .venv\Scripts\ruff.exe format python\
 ```
 
 A Windows virtualenv puts executables in `Scripts\`, not `bin/`. The
-figure scripts (`pythonviz_dayNN.py`) also need Graphviz's `dot` on PATH
+figure scripts (`python\viz_dayNN.py`) also need Graphviz's `dot` on PATH
 (installed at `C:\Program Files\Graphviz`); they write PNGs into
 `Problem_Statements\days\images\`, which is committed. Nothing in the
 solutions or tests imports them. `.venv/`,
