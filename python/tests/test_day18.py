@@ -19,9 +19,12 @@ the solver's structure rests on, neither of which the examples exercise:
     there, reporting every key locked. The real input is where this stops
     being theoretical: `test_real_maze_is_not_a_tree` shows it has cycles.
 
-Part Two's statement text is not in day18.md yet (it unlocks on submission),
-so its worked examples are not here; the four-vault split is instead checked
-against the oracle and by construction (`test_split_entrance_*`).
+Part Two ships four worked examples of its own (8 / 24 / 32 / 72 steps).
+Their maps arrive PRE-SPLIT -- four `@`s already in place -- so they run
+through `min_steps` directly rather than `part2`, whose job includes the
+3x3 rewrite; the rewrite itself is checked by construction
+(`test_split_entrance_*`) and end-to-end on the unsplit form of the
+statement's own first Part Two map (`test_part2_matches_the_oracle_on_a_four_vault_map`).
 """
 
 from __future__ import annotations
@@ -30,9 +33,18 @@ from collections import deque
 
 import day18
 import pytest
-from day18 import Vault, all_keys_mask, condense, parse_input, part1, part2, split_entrance
+from day18 import (
+    Vault,
+    all_keys_mask,
+    condense,
+    min_steps,
+    parse_input,
+    part1,
+    part2,
+    split_entrance,
+)
 
-LOCKED = None  # not yet submitted to adventofcode.com
+LOCKED = (5450, 2020)  # verified on adventofcode.com
 
 EX1 = """#########
 #b.A.@.a#
@@ -156,6 +168,9 @@ def test_detour_around_a_locked_door():
 
 # ------------------------------------------------------------------- part two
 
+# The statement's first Part Two example, in its UNSPLIT form (the statement
+# shows this map on both sides of the rewrite arrow) -- exercising the whole
+# part2 pipeline, split included, where the pre-split examples below cannot.
 FOUR_VAULTS = """#######
 #a.#Cd#
 ##...##
@@ -163,6 +178,50 @@ FOUR_VAULTS = """#######
 ##...##
 #cB#Ab#
 #######"""
+
+# Part Two's remaining worked examples arrive pre-split -- four @s already in
+# place -- so they run through `min_steps` directly rather than `part2`.
+P2EX2 = """###############
+#d.ABC.#.....a#
+######@#@######
+###############
+######@#@######
+#b.....#.....c#
+###############"""
+
+P2EX3 = """#############
+#DcBa.#.GhKl#
+#.###@#@#I###
+#e#d#####j#k#
+###C#@#@###J#
+#fEbA.#.FgHi#
+#############"""
+
+P2EX4 = """#############
+#g#f.D#..h#l#
+#F###e#E###.#
+#dCba@#@BcIJ#
+#############
+#nK.L@#@G...#
+#M###N#H###.#
+#o#m..#i#jk.#
+#############"""
+
+
+@pytest.mark.parametrize("text, want", [(P2EX2, 24), (P2EX3, 32), (P2EX4, 72)])
+def test_part2_examples(text, want):
+    assert min_steps(parse_input(text)) == want
+
+
+def test_part2_examples_match_the_oracle():
+    """The 24-step example, ground raw as well.
+
+    The only pre-split example the oracle can afford: the 32- and 72-step
+    maps carry 12 and 15 keys, putting the raw-grid state space in the
+    millions. Coverage there comes from `min_steps` itself, whose machinery
+    the smaller maps already check against the oracle piece by piece.
+    """
+    assert oracle(parse_input(P2EX2)) == 24
 
 
 def test_split_entrance_geometry():
@@ -203,13 +262,13 @@ def test_split_entrance_refuses_to_overwrite_a_letter():
 
 
 def test_part2_matches_the_oracle_on_a_four_vault_map():
-    """Four robots, keys and doors deliberately criss-crossed between vaults.
+    """The statement's first Part Two example, run end to end: 8 steps.
 
     Every door here is opened from a DIFFERENT vault (C top-right vs c
     bottom-left, and so on), so no robot can finish alone: progress is
     robots taking turns while the shared mask catches up. The oracle -- the
-    same raw-grid BFS, now over 4-cell position tuples -- pins the answer
-    at 8, and `part2` must agree.
+    same raw-grid BFS, now over 4-cell position tuples -- must agree with
+    `part2`, and both must land on the statement's 8.
     """
     vault = parse_input(FOUR_VAULTS)
     want = oracle(split_entrance(vault))

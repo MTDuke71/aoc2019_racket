@@ -8,8 +8,7 @@
 > small. The trap worth a guide entry is the popular condensation shortcut
 > that silently assumes the maze is a tree — this input has **4 cycles**, the
 > shortcut *happens* to survive them, and the tests here carry the map where
-> it dies. Real input: **5450** and **2020** *(pending submission — not yet
-> verified by adventofcode.com)*.
+> it dies. Real input: **5450** and **2020**.
 
 ## The puzzle in one paragraph
 
@@ -22,12 +21,6 @@ time, and the answer is the fewest *total* steps for the four of them to
 collect all 26 keys. Real input: answers **5450** and **2020** — Part 2 is
 *smaller*, because four robots start pre-positioned where one robot had to
 trek back and forth.
-
-> **Statement caveat.** `day18.md` currently holds Part One only — Part Two's
-> text unlocks when Part One is submitted. The split-and-four-robots rule
-> implemented here is that Part Two; once the text is pasted in, its worked
-> examples should be added to the test module alongside the synthetic
-> four-vault maps that stand in for them today.
 
 Code: [python/day18.py](../../python/day18.py). Tests:
 [python/tests/test_day18.py](../../python/tests/test_day18.py).
@@ -279,14 +272,19 @@ plain product search grows into seconds.
 
 ## Tests (what is pinned and why)
 
-23 tests. The statement's five Part One examples (8 / 86 / 132 / 136 / 81)
-run as written; beyond those, the module pins the claims the solver's
-structure rests on:
+27 tests. The statement's five Part One examples (8 / 86 / 132 / 136 / 81)
+and four Part Two examples (8 / 24 / 32 / 72) run as written — the Part Two
+maps arrive pre-split, four `@`s already in place, so they go through
+`min_steps` directly, except the first, whose unsplit form exercises the
+whole `part2` pipeline including the rewrite. Beyond those, the module pins
+the claims the solver's structure rests on:
 
 * **`oracle`** — brute-force BFS over `(positions, mask)` on the raw grid,
   sharing no assumption with the code under test — must agree with
-  `min_steps` on four statement examples and both synthetic four-vault maps.
-  This is the check on condensation *and* on stride-cutting at once.
+  `min_steps` on every map small enough to grind: four of the five Part One
+  examples (the 16-key one would cost ~2^16 masks), the two smallest Part
+  Two examples, and the forced-chain map. This is the check on condensation
+  *and* on stride-cutting at once.
 * **`test_detour_around_a_locked_door`** — the cycle map where the
   doors-as-annotations shortcut deadlocks; `part1` and the oracle both
   return 16.
@@ -301,8 +299,8 @@ structure rests on:
   repo's standing Windows rule; `test_real_map_shape` (81×81, 26+26 letters,
   entrance at (40, 40) with the open 3×3 Part 2 needs);
   `test_no_keys_means_no_steps`; `test_unreachable_key_raises`;
-  `check_locked` — currently `LOCKED = None`, reporting 5450 / 2020 as
-  UNVERIFIED until they are accepted by the site.
+  `check_locked` against `LOCKED = (5450, 2020)`, both verified on
+  adventofcode.com.
 
 ## Benchmarks
 
