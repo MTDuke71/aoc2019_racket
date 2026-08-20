@@ -286,9 +286,18 @@ The Part 2 surgery, above. Refuses a cramped or lettered 3×3.
 
 ### `condense`
 
-One BFS per point of interest, stopping at the others. Parallel corridors
-between the same pair of vertices become parallel edges; Dijkstra simply
-never prefers the longer one, so no dedup is needed.
+One BFS per point of interest, stopping at the others. `frontier` holds
+plain floor only: a neighbour that is itself a key, door or entrance is
+recorded as an edge and **not** pushed, so each sweep floods just its own
+pocket of corridor rather than the whole maze. Measured: the 53 sweeps make
+**12,216** cell visits in total -- each cell is seen about 3.8 times, not
+53 -- and the loop runs until the deque is empty, so nothing is left in
+`frontier` at the end. What the sweeps do waste is dead ends: 1,315 of the
+3,201 open cells (41%) lie in cul-de-sacs that contain no point of
+interest, and 4,215 of the 12,216 visits (35%) are spent walking into them
+and out again. See the dead-end peel under "Possible optimization".
+Parallel corridors between the same pair of vertices become parallel
+edges; Dijkstra simply never prefers the longer one, so no dedup is needed.
 
 ### `min_steps` and `reachable_keys`
 
@@ -317,6 +326,33 @@ Search-size numbers for calibration, measured on the real input:
 `part1` is `min_steps` on the parsed vault; `part2` is `min_steps` on the
 split vault. Nothing else differs — the day's two halves share every line of
 search code.
+
+## Possible optimization: peel the dead ends before condensing
+
+Untested pseudo-Python, per the sidebar policy. A corridor cell with only
+one open neighbour that is not a key, door or entrance can never lie on a
+shortest route between two points of interest, so it can be deleted; doing
+so may expose its neighbour as the new dead end, so peel iteratively:
+
+```python
+def peel_dead_ends(vault):
+    alive = set(vault.open_cells)
+    pois = set(vault.entrances) | vault.keys.keys() | vault.doors.keys()
+    degree = lambda c: sum(n in alive for n in neighbours(c))
+    tips = deque(c for c in alive if c not in pois and degree(c) <= 1)
+    while tips:
+        c = tips.popleft()
+        if c in alive and c not in pois and degree(c) <= 1:
+            alive.discard(c)
+            tips.extend(n for n in neighbours(c) if n in alive and n not in pois)
+    return alive
+```
+
+Measured on the real input it removes 1,315 cells and would cut 35% of the
+visits out of `condense`. It is not in the shipping code because `condense`
+is 5.5 ms of a 145 ms total -- the prize is about 2 ms -- but it is the
+standard maze-preprocessing move and the one to reach for on inputs where
+the grid, not the product search, is the cost.
 
 ## Possible optimization: sort the heap by keys remaining
 
@@ -389,7 +425,7 @@ day                parse               part 1               part 2      total
 A mid-pack day: an order of magnitude slower than the pure-arithmetic days,
 an order faster than [Day 16](day16_function_guide.md)'s 2 s. The cost is
 almost entirely the ~5,000-state outer Dijkstra re-running inner Dijkstras;
-the grid work (`condense`, 53 BFS sweeps over 3,201 cells) is a one-time
+the grid work (`condense`, 53 BFS sweeps totalling 12,216 cell visits) is a one-time
 5.5 ms (best of 7, measured separately). Part 2 beating Part 1 by 2.5× is the mask-localisation story told
 above, not noise — the spread between best and median on Part 1 is the OS,
 the gap between the parts is structure.
