@@ -75,6 +75,76 @@ but never routes. Measured on the real input: 3,201 open cells collapse to
 **53 vertices and ~88 undirected edges** (176 directed), the longest corridor
 between two points of interest running **262 steps**.
 
+### Pictures: the maze and the graph it condenses to
+
+Rendered by [python/viz_day18.py](../../python/viz_day18.py) (networkx +
+matplotlib, Graphviz `dot` for the layouts) from the real input. Keys are
+teal circles, doors orange squares, entrances indigo diamonds; every node
+carries its letter, so colour is never the only cue.
+
+![The Part 1 vault](images/day18_maze_part1.png)
+
+The 81×81 grid: four quadrants of corridor meeting at the open 3×3 around
+`@`. Every figure in this section was measured in the session that drew
+it; the structural claims are pinned by `test_real_maze_is_not_a_tree` and
+`test_real_cycles_all_sit_in_the_entrance_3x3`.
+
+![Part 1 condensed graph](images/day18_graph_part1.png)
+
+The 53-vertex, 88-edge condensed graph. The layout is Graphviz `dot` run on
+the **hop-depth spanning tree** from `@` (straight edges, one rank per point
+of interest deep); the other 36 edges are drawn as arcs. Two things jump
+out that the grid picture hides:
+
+* **Four long chains** hang off the centre. The deepest,
+  `Q w K E b B n N u U f F j J`, is a forced 14-deep sequence, and the
+  chains are where the precedence constraints live. Eight chords sit
+  outside the centre -- `a-g`, `r-Q`, `I-D`, `G-A`, `y-T`, `R-q`, `c-M`,
+  `P-o` -- each closing a small triangle.
+* **The centre is a plaza.** `@` and its 8 condensed neighbours
+  (`h H Z z p s l X`) are pairwise adjacent: 36 edges on 9 vertices, a
+  complete **K9**. 28 of those are non-tree edges, which with the 8 chords
+  accounts for all 36 arcs.
+
+The plaza looks like evidence of an open, cyclic middle. It is not, and the
+distinction matters for the shortcut discussion below. **Condensation turns
+a door-free junction into a clique**: if k points of interest hang off a
+junction region that contains no other point of interest, every pair sees
+the other with nothing in between, and the condensed graph gets K_k -- on a
+*tree*. So the condensed graph's cycle rank (88 − 53 + 1 = 36) says nothing
+about grid cycles. The grid has exactly 4, and a minimum cycle basis puts
+all four **inside the entrance's 3×3**: they are its four 2×2 blocks.
+Delete the 3×3 and the 3,192 remaining cells form a forest (3,184 edges, 8
+pieces -- each vault touches the block at two cells). That is why the
+doors-as-annotations shortcut survives this input: the only cycles hold no
+doors, so there is never a detour a door annotation could miss. It is
+luck, not a guarantee.
+
+![The plaza](images/day18_plaza.png)
+
+The plaza on its own, thicker = shorter. Part 2 walls off the centre of
+this: the rewrite deletes `@` and the 3×3's cross, and with it every grid
+cycle.
+
+![Part 2 split map](images/day18_maze_part2.png)
+
+![Part 2 condensed graph](images/day18_graph_part2.png)
+
+After the split: **56 vertices, 64 edges, 4 components**, 12 arcs, and no
+hub -- each vault is a literal grid tree (3,196 cells, 3,192 edges, 4
+components; pinned by the same test). The vaults are equal in floor area
+(799 cells each) but unequal in work: keys/doors per vault, from the
+legend, are **5/5** (top-left), **5/8** (bottom-left), **12/9**
+(top-right) and **4/4** (bottom-right). The top-right robot owns the
+14-deep chain; its doors `K E B N U F J` are mostly keyed from inside that
+vault (`b n u f j` live there), but `k` is bottom-left's and `e` is
+top-left's, and the chain cannot get past `K` until the bottom-left robot
+has walked `Z`, `D`, `A` and `W` to reach `k`. That is what
+`test_part2_where_one_vault_must_wait_out_a_chain` models in miniature,
+and why the mask-localised cache under `min_steps` earns its keep: three
+robots' progress churns the full mask while the fourth's reachable set has
+not changed.
+
 ### Why doors must be vertices, not annotations
 
 The shortcut most write-ups reach for: BFS key-to-key, record the distance
@@ -272,7 +342,7 @@ plain product search grows into seconds.
 
 ## Tests (what is pinned and why)
 
-27 tests. The statement's five Part One examples (8 / 86 / 132 / 136 / 81)
+28 tests. The statement's five Part One examples (8 / 86 / 132 / 136 / 81)
 and four Part Two examples (8 / 24 / 32 / 72) run as written — the Part Two
 maps arrive pre-split, four `@`s already in place, so they go through
 `min_steps` directly, except the first, whose unsplit form exercises the
@@ -290,6 +360,10 @@ the claims the solver's structure rests on:
   return 16.
 * **`test_real_maze_is_not_a_tree`** — 3,201 cells, 3,204 adjacencies: the
   cycles that make the previous test more than hypothetical.
+* **`test_real_cycles_all_sit_in_the_entrance_3x3`** — and where they are:
+  delete the open 3×3 and the rest is a forest; the Part 2 split map is
+  four trees. This is the measured reason the annotation shortcut *happens*
+  to work here, and the reason Part 2's vaults have no cycles at all.
 * **`test_split_entrance_geometry`** and the two refusal tests — the Part 2
   rewrite touches exactly five cells, and refuses a cramped or lettered 3×3
   rather than corrupting the map.

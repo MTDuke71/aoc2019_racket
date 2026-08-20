@@ -348,6 +348,49 @@ def test_real_maze_is_not_a_tree(real_input):
     assert edges >= len(vault.open_cells)
 
 
+def _forest_census(cells: set) -> tuple[int, int, int]:
+    """(vertices, edges, components) of the grid graph on `cells`; a forest has E == V - C."""
+    edges = sum(1 for (x, y) in cells for nbr in ((x + 1, y), (x, y + 1)) if nbr in cells)
+    seen: set = set()
+    components = 0
+    for start in cells:
+        if start in seen:
+            continue
+        components += 1
+        seen.add(start)
+        stack = [start]
+        while stack:
+            x, y = stack.pop()
+            for nbr in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if nbr in cells and nbr not in seen:
+                    seen.add(nbr)
+                    stack.append(nbr)
+    return len(cells), edges, components
+
+
+def test_real_cycles_all_sit_in_the_entrance_3x3(real_input):
+    """Where those cycles are: all four are the 2x2 blocks of the open 3x3
+    around `@`. Delete that 3x3 and what remains is a forest (3192 cells,
+    3184 edges, 8 pieces -- each vault touches the block at two cells), and
+    Part 2's surgery, which keeps the corners, is a forest of exactly four
+    trees. Two things follow. The doors-as-annotations shortcut survives
+    THIS input only because its cycles hold no doors; and the split maze is
+    literally a tree per vault. (The condensed graph still has cycles -- a
+    door-free junction condenses to a clique -- but those are artefacts of
+    condensation, not alternate grid routes.)
+    """
+    vault = parse_input(real_input(18))
+    ((ex, ey),) = vault.entrances
+    block = {(ex + dx, ey + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    assert block <= vault.open_cells
+    v, e, c = _forest_census(vault.open_cells - block)
+    assert (v, e, c) == (3192, 3184, 8)
+    assert e == v - c
+    v, e, c = _forest_census(set(split_entrance(vault).open_cells))
+    assert (v, e, c) == (3196, 3192, 4)
+    assert e == v - c
+
+
 def test_solve_agrees_with_the_parts(real_input):
     vault = parse_input(real_input(18))
     assert day18.solve(vault) == (part1(vault), part2(vault))
