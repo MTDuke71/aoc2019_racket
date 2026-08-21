@@ -284,70 +284,83 @@ SECTIONS = {
     303: "0303 .. 0423 -- mul3(a, b, c): a*b*c as a sort-then-telescope recursion",
 }
 
-# Terse per-address annotations; the analysis behind them lives in
-# day19_disassembly.md. Calls and returns are detected, not listed here.
-NOTES = {
-    0: "stack starts at 424, one cell past the file",
-    2: "read x",
-    18: "X = x",
-    22: "read y",
-    38: "arg = [23] = 1 -- MINED: the operand of `in rb[+1]` at 22",
-    46: "arg = 1",
-    57: "Y = 1*1*y = y",
-    69: "f = abs",
-    80: "*** A = 76 ***",
-    91: "quad = 76*X^2",
-    103: "decoy immediate: the trampoline's own address",
-    107: "decoy again; its operand cell 109 feeds the jump at 192",
-    122: "*** B = 100 ***",
-    133: "-100*Y^2",
-    137: "76*X^2 - 100*Y^2",
-    148: "quad = |76*X^2 - 100*Y^2|",
-    160: "*** C = 17 ***",
-    164: "tmp = [132]-2 -- [132] = 303, the operand of the call at 130",
-    168: "tmp = tmp*2",
-    172: "tmp = tmp+3",
-    176: "[132] = -[132] -- DESTRUCTIVE; 130 already ran, never runs again",
-    180: "tmp = tmp-303",
-    184: "f = tmp+1 = 303 = mul3 -- ((v-2)*2+3)-v+1 == v, an algebraic no-op",
-    195: "t = (17*X*Y < quad), i.e. NOT lit",
-    199: "cell 23 mined again",
-    203: "args (1, t, -1)",
-    214: "1 - t",
-    218: "1 if lit, 0 if not",
-    227: "PATCH: jump operand at 249 <- f",
-    247: "cell 249 holds the patched target (rests as 225)",
-    261: "s = (v > 0)",
-    265: "s = 2s",
-    269: "s = 2s-1, in {-1, +1}",
-    273: "v = s*v = |v|",
-    284: "v < 0 ?",
-    291: "confused drone: report 0 and die",
-    294: "identity copy -- the 'return value'",
-    305: "b < a ?  -> recurse as (b, a, c)",
-    312: "additive swap, no temp: a += b ...",
-    320: "... old_a = a - b ...",
-    328: "... new arg = a - old_a = b",
-    346: "c < b ?  -> recurse as (a, c, b)",
-    353: "the same additive swap for (b, c)",
-    387: "a <= b <= c from here: the telescope",
-    391: "a = b - a",
-    395: "c = b*c",
-    399: "a = c*a = b*c*(b-a)",
-    403: "b = b*c = b^2*c",
-    411: "b^2*c - b*c*(b-a) = a*b*c",
-    415: "return slot <- the product",
-}
+
+def notes_for(mem: list[int]) -> dict[int, str]:
+    """Terse per-address annotations; the analysis behind them lives in
+    day19_disassembly.md. Calls and returns are detected, not listed here.
+
+    Built per-program: the constants A, B, C are this file's own (recovered,
+    not assumed), and the indirect jump's operand cell is read out of the
+    jump itself -- the identity-operand shuffle moves it between files.
+    """
+    a, b, c = recover_constants(mem)
+    indirect_cell = mem[194]  # the `jz #0 [cell]` at 192 names its own source
+    return {
+        0: "stack starts at 424, one cell past the file",
+        2: "read x",
+        18: "X = x",
+        22: "read y",
+        38: "arg = [23] = 1 -- MINED: the operand of `in rb[+1]` at 22",
+        46: "arg = 1",
+        57: "Y = 1*1*y = y",
+        69: "f = abs",
+        80: f"*** A = {a} ***",
+        91: f"quad = {a}*X^2",
+        103: "decoy immediate: the trampoline's own address",
+        107: f"decoy again; its operand cell {indirect_cell} feeds the jump at 192",
+        122: f"*** B = {b} ***",
+        133: f"-{b}*Y^2",
+        137: f"{a}*X^2 - {b}*Y^2",
+        148: f"quad = |{a}*X^2 - {b}*Y^2|",
+        160: f"*** C = {c} ***",
+        164: "tmp = [132]-2 -- [132] = 303, the operand of the call at 130",
+        168: "tmp = tmp*2",
+        172: "tmp = tmp+3",
+        176: "[132] = -[132] -- DESTRUCTIVE; 130 already ran, never runs again",
+        180: "tmp = tmp-303",
+        184: "f = tmp+1 = 303 = mul3 -- ((v-2)*2+3)-v+1 == v, an algebraic no-op",
+        195: f"t = ({c}*X*Y < quad), i.e. NOT lit",
+        199: "cell 23 mined again",
+        203: "args (1, t, -1)",
+        214: "1 - t",
+        218: "1 if lit, 0 if not",
+        227: "PATCH: jump operand at 249 <- f",
+        247: "cell 249 holds the patched target (rests as 225)",
+        261: "s = (v > 0)",
+        265: "s = 2s",
+        269: "s = 2s-1, in {-1, +1}",
+        273: "v = s*v = |v|",
+        284: "v < 0 ?",
+        291: "confused drone: report 0 and die",
+        294: "identity copy -- the 'return value'",
+        305: "b < a ?  -> recurse as (b, a, c)",
+        312: "additive swap, no temp: a += b ...",
+        320: "... old_a = a - b ...",
+        328: "... new arg = a - old_a = b",
+        346: "c < b ?  -> recurse as (a, c, b)",
+        353: "the same additive swap for (b, c)",
+        387: "a <= b <= c from here: the telescope",
+        391: "a = b - a",
+        395: "c = b*c",
+        399: "a = c*a = b*c*(b-a)",
+        403: "b = b*c = b^2*c",
+        411: "b^2*c - b*c*(b-a) = a*b*c",
+        415: "return slot <- the product",
+    }
 
 
-def full_listing(mem: list[int]) -> str:
+def full_listing(mem: list[int], source: str = "day19.txt") -> str:
     """The whole image, cell by cell, as one continuous annotated listing.
 
     Layout follows day17_listing.md (address, raw cells, assembly, terse
     comment). Every cell of the image appears exactly once -- asserted, not
-    hoped. NOT committed: the raw cells republish the puzzle input (see
-    .gitignore); regenerate with `python python/day19_disasm.py --full`.
+    hoped. Works on any user's file: the annotations carry the program's OWN
+    recovered constants (see `notes_for`), so the alt listing is honest
+    rather than confidently wrong. NOT committed: the raw cells republish a
+    puzzle input (see .gitignore); regenerate with
+    `python python/day19_disasm.py [inputs/day19_alt.txt] --full`.
     """
+    notes = notes_for(mem)
     covered: set[int] = set()
     lines: list[str] = []
     addr = 0
@@ -362,7 +375,7 @@ def full_listing(mem: list[int]) -> str:
             addr += 1
             continue
         text, op, length = decode(mem, addr)
-        note = NOTES.get(addr, "")
+        note = notes.get(addr, "")
         if not note and op in (5, 6):
             mode2 = (mem[addr] // 1000) % 10
             target = mem[addr + 2]
@@ -381,8 +394,8 @@ def full_listing(mem: list[int]) -> str:
     assert covered == set(range(len(mem))), sorted(set(range(len(mem))) - covered)[:5]
 
     intro = (
-        f"# Day 19 -- the complete listing (`day19.txt`)\n\n"
-        f"> All {len(mem)} integers of `inputs/day19.txt`, every one accounted for:\n"
+        f"# Day 19 -- the complete listing (`{source}`)\n\n"
+        f"> All {len(mem)} integers of `inputs/{source}`, every one accounted for:\n"
         f"> 119 instructions across main and four subroutines, plus the four\n"
         f"> variable cells at 221-224. Generated by\n"
         f"> [python/day19_disasm.py](../../python/day19_disasm.py) --\n"
@@ -407,7 +420,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if full:
         sys.stdout.reconfigure(encoding="utf-8")
-        print(full_listing(mem), end="")
+        print(full_listing(mem, source=path.name), end="")
         return
 
     pass1(mem)

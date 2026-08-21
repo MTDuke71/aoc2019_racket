@@ -274,14 +274,8 @@ straddling both edges at y = 500 and y = 1000, where a boundary
 off-by-one would actually show. (Pinned as
 `test_recovered_formula_matches_the_vm_window`.)
 
-This was validated empirically against a **second user's input file**:
-same 424-cell skeleton, but every coin-flip landed differently —
-swapped immediate operands, `jnz #1` where this file has `jz #0`, the
-indirect call reading `[108]` instead of `[109]` — and the constants
-were different: `|167x² − 93y²| ≤ 21xy`, disc = 62565 (also not a
-perfect square), a beam leaning the *other* side of the diagonal
-(x/y ∈ [0.686, 0.812]). All five passes ran unchanged and the static
-answers (154 / 9791328) matched that input's live machine.
+The section [below](#a-second-users-file) validates all of this against
+a second user's actual input file.
 
 ## The geometry of `|76x² − 100y²| ≤ 17xy`
 
@@ -327,6 +321,52 @@ and `test_static_answers_match_the_live_machine`. The fit is tuned
 tight on both sides: R(905) = 1144 is exactly the square's top-right
 corner, and one row earlier misses by a single cell
 (L(1003) + 99 = 1143 > R(904) = 1142).
+
+## A second user's file
+
+`inputs/day19_alt.txt` is another user's program — gitignored like
+every input, in the [Day 15](day15_disassembly.md) `day15_alt.txt`
+tradition. Same 424 cells, same skeleton, same 119 instructions; a
+different formula and a differently-leaning beam:
+
+| | `day19.txt` | `day19_alt.txt` |
+| --- | --- | --- |
+| predicate | \|76x² − 100y²\| ≤ 17xy | \|167x² − 93y²\| ≤ 21xy |
+| disc = C² + 4AB | 30689 (isqrt 175) | 62565 (isqrt 250) — also no square |
+| beam slopes x/y | 1.0407 … 1.2644 | 0.6860 … 0.8118 |
+| 100×100 square at | (1045, 905) | (979, 1328) |
+| part 1 / part 2 | 209 / 10450905 | 154 / 9791328 |
+
+The alt beam leans the *other* side of the diagonal (x < y), so its
+square lands mirrored — a healthy reminder that nothing in the solver
+may assume which way the cone tips.
+
+**113 of the 424 cells differ, spread across 49 instructions — and
+only three values mean anything.** The rest is the same coin-flip
+spelling machinery [Day 15](day15_disassembly.md) documented (`x·1` vs
+`x+0` copies, `jnz #1` vs `jz #0` jumps), with one twist that makes
+Day 19's version strictly harder: flipping `add #0 #167` to
+`mul #1 #76` moves the payload to a *different cell* (B rides at 123
+in one file and 124 in the other; C at 162 vs 161), and the decoy's
+operand shuffle likewise moves the indirect jump's source from `[109]`
+to `[108]`. So there is no fixed set of meaningful *cells* at all —
+the meaningful unit is the instruction, which is exactly why
+`recover_constants` evaluates whole instructions and classifies them
+by their consuming call. `test_only_the_three_constant_sites_carry_meaning`
+proves it by splicing: move just the three 4-cell constant loads from
+the alt file into this one and the machine *is* the alt drone,
+verified against the alt formula — with 104 cells still textually
+different.
+
+All five passes run unchanged on either file
+(`python python/day19_disasm.py inputs/day19_alt.txt`), the constant
+and static-answer tests parametrize over both, and the alt file gets
+its own honest listing — `notes_for` builds the annotations from each
+program's *recovered* constants rather than this file's:
+
+    python python/day19_disasm.py inputs/day19_alt.txt --full > Problem_Statements/days/day19_alt_listing.md
+
+(gitignored, like every full listing).
 
 ## How the tool fared
 

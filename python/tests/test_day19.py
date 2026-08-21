@@ -353,5 +353,49 @@ def test_static_answers_match_the_live_machine(real_input):
     assert day19_disasm.static_part2(a, b, c) == part2(mem)
 
 
+# -------------------------------------------- a second user's file (day19_alt)
+
+# inputs/day19_alt.txt is another user's program -- gitignored like every
+# input, so all of these skip on a clone that lacks it. Same 424-cell
+# skeleton; different constants; every encoding coin-flip re-rolled.
+
+
+@pytest.mark.parametrize("day, want", [(19, (76, 100, 17)), ("19_alt", (167, 93, 21))])
+def test_recovered_constants(real_input, day, want):
+    """Structural recovery reads each file's own constants -- the alt file's
+    coin-flips (swapped immediates, jnz/jz spellings, the indirect jump
+    reading a different operand cell) must not matter."""
+    assert day19_disasm.recover_constants(parse_input(real_input(day))) == want
+
+
+def test_alt_static_answers_match_the_alt_machine(real_input):
+    """The whole pipeline on the foreign file: recovered formula -> isqrt
+    edges -> both answers, against that file's live machine."""
+    mem = parse_input(real_input("19_alt"))
+    a, b, c = day19_disasm.recover_constants(mem)
+    assert day19_disasm.static_part1(a, b, c) == part1(mem)
+    assert day19_disasm.static_part2(a, b, c) == part2(mem)
+
+
+def test_only_the_three_constant_sites_carry_meaning(real_input):
+    """113 of 424 cells differ between the two files, spread over 49
+    instructions -- but splice just the three constant-loading instructions
+    (12 cells) from the alt file into this one and the machine IS the alt
+    drone. Cell-level splicing is impossible by design: the identity-operand
+    shuffle moves the payload between cells (B rides at 123 vs 124, C at 162
+    vs 161), so the meaningful unit is the instruction, not the cell --
+    [Day 15](day15_disassembly.md)'s three-cells result, one notch harder."""
+    mem = parse_input(real_input(19))
+    alt = parse_input(real_input("19_alt"))
+    assert sum(1 for x, y in zip(mem, alt) if x != y) == 113
+    spliced = list(mem)
+    for site in (80, 122, 160):
+        spliced[site : site + 4] = alt[site : site + 4]
+    assert day19_disasm.recover_constants(spliced) == day19_disasm.recover_constants(alt)
+    probe = beam_probe(spliced)
+    closed = day19_disasm.formula_probe(*day19_disasm.recover_constants(alt))
+    assert all(probe(x, y) == closed(x, y) for y in range(0, 50, 7) for x in range(0, 50, 7))
+
+
 def test_real_input(check_locked):
     check_locked(19, LOCKED)
