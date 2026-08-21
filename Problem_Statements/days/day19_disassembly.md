@@ -56,11 +56,19 @@ under the surface.
 Stack: `arb #424` at address 0 parks the relative base one past the end
 of the file, so frames grow into untouched memory — same layout as Day
 17 (whose stack began exactly one cell past its bitmap). Every cell of
-the file is accounted for: 119 instructions plus the four variables.
-Linear disassembly works end to end — with one caveat: cells 221–224
-are *data between functions*, and a decoder that doesn't know that
-reads `0` at 221 and stops. That is the entire descent difficulty of
-this program; there is no other trap.
+the file is accounted for: 119 instructions plus the four variables,
+asserted cell-for-cell by `full_listing` and pinned by
+`test_full_listing_accounts_for_every_cell`. The complete annotated
+listing with raw cells is generated locally, in the
+[Day 17](day17_disassembly.md) tradition —
+
+    python python/day19_disasm.py --full > Problem_Statements/days/day19_listing.md
+
+— and stays gitignored, because a listing that shows every raw cell
+republishes the puzzle input. Linear disassembly works end to end —
+with one caveat: cells 221–224 are *data between functions*, and a
+decoder that doesn't know that reads `0` at 221 and stops. That is the
+entire descent difficulty of this program; there is no other trap.
 
 ## Reading the main routine
 

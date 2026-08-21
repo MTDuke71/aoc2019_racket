@@ -1,7 +1,7 @@
 # Day 19 — Tractor Beam (function guide)
 
 > Code: [python/day19.py](../../python/day19.py). Tests:
-> [python/tests/test_day19.py](../../python/tests/test_day19.py) (24 tests).
+> [python/tests/test_day19.py](../../python/tests/test_day19.py) (25 tests).
 > Disassembly: [day19_disassembly.md](day19_disassembly.md) with tool
 > [python/day19_disasm.py](../../python/day19_disasm.py).
 > Statement: [day19.md](day19.md).

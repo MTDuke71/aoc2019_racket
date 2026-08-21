@@ -331,6 +331,19 @@ def test_static_edges_agree_with_the_formula(real_input):
         assert not closed(lo - 1, y) and not closed(hi + 1, y)
 
 
+def test_full_listing_accounts_for_every_cell(real_input):
+    """The complete listing covers all 424 cells exactly once -- 119
+    instruction lines plus the 4 variable cells. `full_listing` asserts
+    exact coverage internally (any gap or overlap raises); this pins the
+    counts the listing's own header claims."""
+    mem = parse_input(real_input(19))
+    text = day19_disasm.full_listing(mem)
+    assert len(mem) == 424
+    rows = [line for line in text.splitlines() if line[:4].isdigit()]
+    assert len(rows) == 119 + 4
+    assert sum(1 for row in rows if ".var" in row) == 4
+
+
 def test_static_answers_match_the_live_machine(real_input):
     """Both answers by pure isqrt arithmetic equal both answers by VM probing
     -- Day 17's 'answers off the disk' cross-check, in miniature."""
