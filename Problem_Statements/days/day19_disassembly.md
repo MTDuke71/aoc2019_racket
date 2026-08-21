@@ -274,6 +274,15 @@ straddling both edges at y = 500 and y = 1000, where a boundary
 off-by-one would actually show. (Pinned as
 `test_recovered_formula_matches_the_vm_window`.)
 
+This was validated empirically against a **second user's input file**:
+same 424-cell skeleton, but every coin-flip landed differently —
+swapped immediate operands, `jnz #1` where this file has `jz #0`, the
+indirect call reading `[108]` instead of `[109]` — and the constants
+were different: `|167x² − 93y²| ≤ 21xy`, disc = 62565 (also not a
+perfect square), a beam leaning the *other* side of the diagonal
+(x/y ∈ [0.686, 0.812]). All five passes ran unchanged and the static
+answers (154 / 9791328) matched that input's live machine.
+
 ## The geometry of `|76x² − 100y²| ≤ 17xy`
 
 Factor the two halves of the absolute value:
