@@ -45,7 +45,8 @@ VAULT_TINTS = ["#dbe8f7", "#e3f2dc", "#fbe7d9", "#ede1f4"]
 def grid_shape(vault: Vault) -> tuple[int, int]:
     xs = [x for x, _ in vault.open_cells]
     ys = [y for _, y in vault.open_cells]
-    return max(xs) + 2, max(ys) + 2  # open cells never touch the border, so +2 is the full wall-to-wall extent
+    # open cells never touch the border, so +2 is the full wall-to-wall extent
+    return max(xs) + 2, max(ys) + 2
 
 
 def flood(vault: Vault, start: Pos) -> set[Pos]:
