@@ -23,7 +23,7 @@ the score once the last block is gone.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Callable, Iterator
+from collections.abc import Callable, Iterator
 
 EMPTY, WALL, BLOCK, PADDLE, BALL = range(5)
 
@@ -175,7 +175,11 @@ def play(program: list[int], quarters: int | None = 2) -> int:
     score = 0
     ball = paddle = 0
 
-    for x, y, tile in commands(vm, lambda: (ball > paddle) - (ball < paddle)):
+    def joystick() -> int:
+        # Deliberately late-bound: reads ball/paddle as they are when the VM asks.
+        return (ball > paddle) - (ball < paddle)
+
+    for x, y, tile in commands(vm, joystick):
         if (x, y) == (-1, 0):
             score = tile  # the sentinel triple carries a score, not a tile
         elif tile == BALL:

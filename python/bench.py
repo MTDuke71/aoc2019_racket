@@ -83,7 +83,7 @@ def bench_day(day: int, reps: int) -> dict[str, tuple[float, float] | str]:
             continue
         try:
             fn(module.parse_input(text))  # warm-up; also surfaces a broken part
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- report any failure as a row, keep benching
             result[name] = f"{type(exc).__name__}: {exc}"
             continue
 

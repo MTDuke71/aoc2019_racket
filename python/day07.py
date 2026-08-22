@@ -44,12 +44,12 @@ def run_inputs(program: list[int], inputs: list[int]) -> list[int]:
         op = instr % 100
         modes = instr // 100
 
-        def val(n: int) -> int:
+        def val(n: int, ip: int = ip, modes: int = modes) -> int:
             raw = ref(ip + n)
             mode = (modes // (10 ** (n - 1))) % 10
             return raw if mode == 1 else ref(raw)
 
-        def addr(n: int) -> int:
+        def addr(n: int, ip: int = ip) -> int:
             return ref(ip + n)
 
         if op == 1:
