@@ -460,3 +460,18 @@ def test_python_drone_rejects_negatives_like_the_machine(real_input, x, y):
             outputs.append(result[1])
     assert outputs == [0]
     assert day19_program.drone_from_program(parse_input(real_input(19)))(x, y) == 0
+
+
+@pytest.mark.parametrize("day", [19, "19_alt"])
+def test_python_drone_answers_match_the_machine(real_input, day):
+    """End to end: the decompiled drone, driven by the very same count_beam /
+    find_square as the shipping solution, yields both answers the Intcode
+    machine does -- on both users' files."""
+    mem = parse_input(real_input(day))
+    drone = day19_program.drone_from_program(mem)
+
+    def py(x: int, y: int) -> bool:
+        return bool(drone(x, y))
+
+    x, y = find_square(py, 100)
+    assert (count_beam(py, 50), 10000 * x + y) == (part1(mem), part2(mem))

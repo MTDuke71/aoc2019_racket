@@ -439,5 +439,6 @@ Day 25 arrives.
 | static part 1 and part 2 equal the live machine's | `test_static_answers_match_the_live_machine` |
 | the Python decompilation equals the VM on the window and edge bands, both files | `test_python_drone_matches_the_vm` |
 | negative input: the Python drone answers 0 exactly as the machine does | `test_python_drone_rejects_negatives_like_the_machine` |
+| the Python drone yields both answers the machine does, both files (209/10450905, 154/9791328) | `test_python_drone_answers_match_the_machine` |
 
 plus the tool's own five passes, which assert everything they print.
