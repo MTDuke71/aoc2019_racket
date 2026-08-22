@@ -28,6 +28,7 @@ other user's input file.
 from __future__ import annotations
 
 import day19_disasm
+import day19_program
 import pytest
 from day19 import (
     beam_probe,
@@ -399,3 +400,63 @@ def test_only_the_three_constant_sites_carry_meaning(real_input):
 
 def test_real_input(check_locked):
     check_locked(19, LOCKED)
+
+
+# ------------------------------------- the decompiled program (day19_program)
+
+
+@pytest.mark.parametrize("args", [(2, 3, 5), (5, 3, 2), (3, 5, 2), (0, 4, 9), (-3, 7, -2), (1, 1, 1004)])
+def test_mul3_is_multiplication(args):
+    """The sort-then-telescope routine at 303-423 is a*b*c for any integers:
+    b^2 c - b c (b - a) == a b c holds regardless of order or sign."""
+    a, b, c = args
+    assert day19_program.mul3(*args) == a * b * c
+
+
+def test_apply_is_an_indirect_call():
+    """The trampoline is f(*args), and main's decoy apply(apply, abs, v) is
+    two unwinds to abs(v)."""
+    assert day19_program.apply(day19_program.mul3, 2, 3, 7) == 42
+    assert day19_program.apply(day19_program.apply, day19_program.abs_, -9) == 9
+
+
+def test_reject_neg_halts_with_zero():
+    assert day19_program.reject_neg(5) == 5
+    with pytest.raises(day19_program.Halt) as halted:
+        day19_program.reject_neg(-1)
+    assert halted.value.output == 0
+
+
+@pytest.mark.parametrize("day", [19, "19_alt"])
+def test_python_drone_matches_the_vm(real_input, day):
+    """drone(x, y) from the decompilation agrees with the live Intcode on the
+    full 50x50 window and on bands straddling both beam edges at depth --
+    the same probe set as day19_disasm's pass 3."""
+    mem = parse_input(real_input(day))
+    a, b, c = day19_disasm.recover_constants(mem)
+    vm, py = beam_probe(mem), day19_program.drone_from_program(mem)
+    window = [(x, y) for y in range(50) for x in range(50)]
+    bands = [
+        (x, y)
+        for y in (500, 1000)
+        for edge in (day19_disasm.left_edge_static(a, b, c, y), day19_disasm.right_edge_static(a, b, c, y))
+        for x in range(edge - 5, edge + 6)
+    ]
+    assert all(py(x, y) == int(vm(x, y)) for x, y in window + bands)
+
+
+@pytest.mark.parametrize("x, y", [(-1, 5), (5, -1), (-1, -1)])
+def test_python_drone_rejects_negatives_like_the_machine(real_input, x, y):
+    """The real machine answers 0 and halts on a negative coordinate
+    (reject_neg, 282-302); beam_probe refuses before the VM runs, so drive
+    the VM directly here."""
+    from intcode import VM
+
+    vm = VM(parse_input(real_input(19)))
+    vm.inputs.extend((x, y))
+    outputs = []
+    while (result := vm.step()) != "halted":
+        if isinstance(result, tuple):
+            outputs.append(result[1])
+    assert outputs == [0]
+    assert day19_program.drone_from_program(parse_input(real_input(19)))(x, y) == 0

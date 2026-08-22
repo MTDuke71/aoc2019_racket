@@ -249,6 +249,39 @@ telescoping intermediates (`b²c`) near 10⁹ ≈ 2³⁰ — either way nowhere
 near needing Intcode's bignums, unlike
 [Day 9](day09_function_guide.md)'s self-test.
 
+## The program as Python
+
+[python/day19_program.py](../../python/day19_program.py) is the
+decompilation: one Python function per routine, each written as what the
+routine *computes* rather than a re-enactment of the cells --
+
+```python
+def apply(f, *args):      return f(*args)     # 225: the self-patching trampoline
+abs_ = abs                                    # 259: ((0 < v)*2 - 1) * v
+def reject_neg(v):        # 282: negative -> out 0, hlt from inside the callee
+    if v < 0: raise Halt(0)
+    return v
+def mul3(a, b, c):        return a * b * c    # 303: the sort-then-telescope recursion
+
+def drone(x, y):          # 0-220: main, for this user's (A, B, C)
+    x, y = abs_(reject_neg(x)), abs_(reject_neg(y))      # Halt -> return 0
+    y = mul3(1, 1, y)
+    quad = mul3(apply(abs_, x), A, x)
+    y = apply(apply, abs_, y)                             # the decoy
+    quad = abs_(quad - mul3(y, B, y))
+    return int(not apply(mul3, C, y, x) < quad)
+```
+
+Everything the listing spends 119 instructions on collapses to that --
+which is the point of the decompilation: it makes visible that the
+`apply`/`abs` chaff, the mined `[23]`, and the laundered call target all
+cancel out, leaving `|A·x² − B·y²| ≤ C·x·y`. The Python drone is held to
+the machine bit-for-bit on the same probe set as pass 3, on both input
+files (`test_python_drone_matches_the_vm`), and its negative-input path
+is checked against what the real VM actually outputs
+(`test_python_drone_rejects_negatives_like_the_machine`); `mul3` and
+`apply` are pinned on their own.
+
 ## Constant recovery, structurally
 
 The formula's skeleton is fixed but the three constants are per-input,
@@ -404,5 +437,7 @@ Day 25 arrives.
 | disc is not a perfect square → rays never touch the lattice | `test_the_rays_never_touch_the_lattice` |
 | the isqrt edges flip exactly where the formula flips | `test_static_edges_agree_with_the_formula` |
 | static part 1 and part 2 equal the live machine's | `test_static_answers_match_the_live_machine` |
+| the Python decompilation equals the VM on the window and edge bands, both files | `test_python_drone_matches_the_vm` |
+| negative input: the Python drone answers 0 exactly as the machine does | `test_python_drone_rejects_negatives_like_the_machine` |
 
 plus the tool's own five passes, which assert everything they print.
