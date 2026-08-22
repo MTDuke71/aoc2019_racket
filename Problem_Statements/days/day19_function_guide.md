@@ -208,13 +208,49 @@ measured, because the machinery already exists in
   (measured **0.994 ms**) — the pair about 1350× faster than the VM
   route, verified equal to it by the disasm tool's pass 5 and by
   `test_static_answers_match_the_live_machine`.
-* **Input-agnostic middle ground.** Without reading the formula out of
-  the file, the row-fit predicate is monotone in y once the beam is
-  wider than the square, so binary search over y (probing `left_edge`
-  fresh per query from a slope estimate) would cut the 906-row walk to
-  ~10 rows — worth reaching for if the square landed at y ≈ 10⁵ instead
-  of 10³. Untested sketch, filed in the
-  [Day 14](day14_function_guide.md) tradition.
+* **Input-agnostic middle ground: bisection over rows** — built and
+  measured in [python/day19_bisect.py](../../python/day19_bisect.py).
+  Without reading the formula out of the file, the row-fit predicate
+  *looks* monotone in y once the beam is wider than the square, so the
+  plan is: exponential search to a fitting row, bisect down, and find
+  each row's left edge by bisecting too (bracketed by the beam's centre
+  ray extrapolated from the reference row y = 99). That cuts the
+  906-row walk to ~25 row queries of ~12 probes each:
+
+  | oracle | input | `find_square` (walk) | `find_square_bisect` | ratio |
+  |---|---|---:|---:|---:|
+  | live VM | day19 | 2857 probes, 722 / 727 ms | **411 probes, 106 / 108 ms** | 7.0× |
+  | live VM | day19_alt | 3637 probes, 971 / 974 ms | **384 probes, 103 / 103 ms** | 9.5× |
+  | formula | day19 | 0.710 / 0.721 ms | 0.120 / 0.125 ms | 5.9× |
+  | formula | day19_alt | 0.912 / 0.921 ms | 0.113 / 0.115 ms | 8.1× |
+
+  (`python\day19_bisect.py 7`, best / median.) Same answers on both
+  files, pinned by `test_bisect_square_matches_the_walk_on_real_input`.
+
+  **The trap: the fit predicate is *not* monotone.** The square fits on
+  row y iff `⌈αy⌉ + 99 ≤ ⌊β(y−99)⌋`. The real-valued slack
+  `s(y) = β(y−99) − αy − 99` grows by (β−α) per row, but the ceil and
+  floor each steal up to one cell, so while `0 ≤ s(y) < 2` the lattice
+  decides each row on its own. On `day19_alt.txt` that reads: fits at
+  1427, fails 1428–1430, fits 1431–1432, fails 1433, settles at 1434.
+  A plain bisection returns 1431 or 1434 — a wrong answer — while the
+  shipping walk, which checks every row in order, is immune. Pinned by
+  `test_the_fit_predicate_flickers_on_the_lattice`; the sketch in the
+  previous revision of this guide would have shipped that bug.
+
+  The fix is to bound the flicker band *from the oracle* and scan it.
+  `s ≥ 2` is sufficient and `s ≥ 0` necessary, so every false→true
+  transition lies within `2/(β−α)` rows of the first fit; and the
+  measured run width obeys `w(y) ≤ (β−α)·y + 1`, so the band is at most
+  `2y/(w−1)` rows — 9 on this input, 17 on the alt — computable from
+  one row's two edges. After bisection lands on a fitting `hi`, the
+  code scans `[hi − band − 1, hi)` linearly and takes the first fit.
+  `test_flicker_band_is_bounded_by_the_measured_width` checks, on both
+  files, that every transition the closed form produces out to y = 4000
+  lies inside that band. The band scan is where most of the bisect's
+  probes go — it is the price of correctness on a lattice, and it is
+  why the speed-up is 7–9× rather than the ~100× a clean log₂ would
+  promise.
 
 ## Tests (what is pinned and why)
 

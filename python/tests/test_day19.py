@@ -27,6 +27,7 @@ other user's input file.
 
 from __future__ import annotations
 
+import day19_bisect
 import day19_disasm
 import day19_program
 import pytest
@@ -475,3 +476,58 @@ def test_python_drone_answers_match_the_machine(real_input, day):
 
     x, y = find_square(py, 100)
     assert (count_beam(py, 50), 10000 * x + y) == (part1(mem), part2(mem))
+
+
+# ------------------------------------------- the bisection sidebar (day19_bisect)
+
+
+def fit_rows(a: int, b: int, c: int, size: int, upto: int) -> list[bool]:
+    """fits(y) for y in range(upto), by the closed-form edges: the square with
+    its bottom-left on the left edge of row y fits iff L(y)+size-1 <= R(y-size+1)."""
+    le, re = day19_disasm.left_edge_static, day19_disasm.right_edge_static
+    return [y >= size - 1 and le(a, b, c, y) + size - 1 <= re(a, b, c, y - size + 1) for y in range(upto)]
+
+
+def test_the_fit_predicate_flickers_on_the_lattice(real_input):
+    """The trap for a naive bisection over rows: on the alt file the row-fit
+    predicate is NOT monotone -- it is true at 1427, false again at 1428, and
+    only settles at 1434. The first fit (the answer) is 1427."""
+    a, b, c = day19_disasm.recover_constants(parse_input(real_input("19_alt")))
+    fits = fit_rows(a, b, c, 100, 1500)
+    assert fits.index(True) == 1427
+    assert [y for y in range(1400, 1500) if fits[y] != fits[y - 1]] == [1427, 1428, 1431, 1433, 1434]
+
+
+@pytest.mark.parametrize("day", [19, "19_alt"])
+def test_flicker_band_is_bounded_by_the_measured_width(real_input, day):
+    """Every false->true transition lies within 2*y/(w(y)-1) rows of the last
+    one -- the bound find_square_bisect derives from one row's run width."""
+    a, b, c = day19_disasm.recover_constants(parse_input(real_input(day)))
+    fits = fit_rows(a, b, c, 100, 4000)
+    flips = [y for y in range(100, 4000) if fits[y] != fits[y - 1]]
+    last = flips[-1]
+    width = day19_disasm.right_edge_static(a, b, c, last) - day19_disasm.left_edge_static(a, b, c, last) + 1
+    band = -(-2 * last // (width - 1))
+    assert all(last - band - 1 <= y <= last for y in flips), (flips, band)
+    assert all(fits[y] for y in range(last, 4000))
+
+
+def test_row_run_finds_both_edges_of_the_wedge():
+    for y in range(10, 60):
+        lo, hi = day19_bisect.row_run(wedge, y, (5 * y + 5) // 6 + 1)
+        assert (lo, hi) == (left_edge(wedge, y), max(x for x in range(2 * y) if wedge(x, y)))
+
+
+def test_bisect_square_matches_the_walk_on_the_wedge():
+    assert day19_bisect.find_square_bisect(wedge, 10) == find_square(wedge, 10)
+
+
+@pytest.mark.parametrize("day", [19, "19_alt"])
+def test_bisect_square_matches_the_walk_on_real_input(real_input, day):
+    """Same square as the shipping walk -- including on the alt file, where
+    the flicker would mislead an unguarded bisection -- and with far fewer
+    probes, counted against the live machine."""
+    mem = parse_input(real_input(day))
+    walk, bisect = day19_bisect.Counted(beam_probe(mem)), day19_bisect.Counted(beam_probe(mem))
+    assert day19_bisect.find_square_bisect(bisect, 100) == find_square(walk, 100)
+    assert bisect.calls * 5 < walk.calls
