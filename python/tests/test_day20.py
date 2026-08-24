@@ -43,7 +43,7 @@ import day20
 import pytest
 from day20 import Maze, parse_input, part1, part2
 
-LOCKED = (442, None)  # part 1 verified on adventofcode.com; part 2 (5208) not yet submitted
+LOCKED = (442, 5208)  # verified on adventofcode.com
 
 EX1 = """\
          A

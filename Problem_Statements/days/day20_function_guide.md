@@ -4,9 +4,8 @@
 > [python/tests/test_day20.py](../../python/tests/test_day20.py) (18 tests).
 > Statement: [day20.md](day20.md), both parts.
 >
-> **Answers: Part 1 = 442 (verified on adventofcode.com), Part 2 = 5208 —
-> not yet submitted.** `LOCKED = (442, None)`: part 1 is asserted, part 2
-> is reported by the skip until the site accepts it.
+> **Answers: Part 1 = 442, Part 2 = 5208** (both verified on
+> adventofcode.com; `LOCKED = (442, 5208)`).
 
 ## The puzzle in one paragraph
 
@@ -303,8 +302,8 @@ is probably a pessimization here.
   back with the opposite delta), and the six stranded tiles.
 * **The depth cap's evidence**: no route at 24; identical answers at
   25 / 27 / 54.
-* **`check_locked(20, LOCKED)`** with `LOCKED = (442, None)`: part 1 is
-  a hard assertion, part 2 reports 5208 and skips until the site accepts.
+* **`check_locked(20, LOCKED)`** with `LOCKED = (442, 5208)` — both
+  parts asserted against the real input.
 
 ## Benchmarks
 
@@ -346,5 +345,4 @@ state bookkeeping changes species.
 
 ## What's next
 
-One loose end: submit Part 2's 5208 and move it into `LOCKED`. Then
 [Day 21](day21.md) — the Intcode machine returns.
