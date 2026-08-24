@@ -8,8 +8,12 @@ which is OUTER, so `test_ex1_walk_matches_the_statement_leg_by_leg` pins
 the classification to the statement's own words rather than to the
 implementation's opinion of itself.
 
-Part Two's recursive reading is covered three ways while its statement
-text is still locked (it unlocks when Part One's answer is submitted):
+Part Two ships one worked example of its own -- the interleaved EX3, 396
+steps diving to level 10 -- and, like Part One, narrates the whole walk.
+`test_part2_ex3_walk_matches_the_statement_leg_by_leg` replays all 33
+legs: every walking distance, every transit's inner/outer sense, the
+final level, and the deepest one. Three further pins predate the unlock
+and stand on their own ground truth:
 
   * The first example's recursive answer must equal its PORTAL-FREE
     shortest path -- the statement itself says that path is 26 steps --
@@ -39,7 +43,7 @@ import day20
 import pytest
 from day20 import Maze, parse_input, part1, part2
 
-LOCKED = None  # not yet submitted to adventofcode.com
+LOCKED = (442, None)  # part 1 verified on adventofcode.com; part 2 (5208) not yet submitted
 
 EX1 = """\
          A
@@ -136,6 +140,48 @@ QQ..#     Y #.#
   ######.######
         Z
         Z
+"""
+
+# Part Two's own worked example: 13 portal pairs, interleaved so the
+# shortest route dives to level 10 and resurfaces twice. From day20.md.
+EX3 = """\
+             Z L X W       C
+             Z P Q B       K
+  ###########.#.#.#.#######.###############
+  #...#.......#.#.......#.#.......#.#.#...#
+  ###.#.#.#.#.#.#.#.###.#.#.#######.#.#.###
+  #.#...#.#.#...#.#.#...#...#...#.#.......#
+  #.###.#######.###.###.#.###.###.#.#######
+  #...#.......#.#...#...#.............#...#
+  #.#########.#######.#.#######.#######.###
+  #...#.#    F       R I       Z    #.#.#.#
+  #.###.#    D       E C       H    #.#.#.#
+  #.#...#                           #...#.#
+  #.###.#                           #.###.#
+  #.#....OA                       WB..#.#..ZH
+  #.###.#                           #.#.#.#
+CJ......#                           #.....#
+  #######                           #######
+  #.#....CK                         #......IC
+  #.###.#                           #.###.#
+  #.....#                           #...#.#
+  ###.###                           #.#.#.#
+XF....#.#                         RF..#.#.#
+  #####.#                           #######
+  #......CJ                       NM..#...#
+  ###.#.#                           #.###.#
+RE....#.#                           #......RF
+  ###.###        X   X       L      #.#.#.#
+  #.....#        F   Q       P      #.#.#.#
+  ###.###########.###.#######.#########.###
+  #.....#...#.....#.......#...#.....#.#...#
+  #####.#.###.#######.#######.###.###.#.#.#
+  #.......#.......#.#.#.#.#...#...#...#.#.#
+  #####.###.#####.#.#.#.#.###.###.#.###.###
+  #.......#.....#.#...#...............#...#
+  #############.#.#.###.###################
+               A O F   N
+               A A D   M
 """
 
 
@@ -240,6 +286,60 @@ def test_part2_ex2_has_no_balanced_route():
         part2(maze)
     with pytest.raises(ValueError, match="within 50 nested mazes"):
         part2(maze, max_depth=50)
+
+
+def test_part2_ex3():
+    assert part2(parse_input(EX3)) == 396  # the statement's own total
+
+
+# The statement's narrated walk, one row per "Walk from X to Y (N steps)":
+# (destination label, walking steps, then the transit -- +1 "Recurse into",
+# -1 "Return to", 0 for the final portal-less walk to ZZ).
+# fmt: off
+EX3_LEGS = [
+    ("XF", 16, +1), ("CK", 10, +1), ("ZH", 14, +1), ("WB", 10, +1),
+    ("IC", 10, +1), ("RF", 10, +1), ("NM", 8, +1), ("LP", 12, +1),
+    ("FD", 24, +1), ("XQ", 8, +1), ("WB", 4, -1), ("ZH", 10, -1),
+    ("CK", 14, -1), ("XF", 10, -1), ("OA", 14, -1), ("CJ", 8, -1),
+    ("RE", 8, -1), ("IC", 4, +1), ("RF", 10, +1), ("NM", 8, +1),
+    ("LP", 12, +1), ("FD", 24, +1), ("XQ", 8, +1), ("WB", 4, -1),
+    ("ZH", 10, -1), ("CK", 14, -1), ("XF", 10, -1), ("OA", 14, -1),
+    ("CJ", 8, -1), ("RE", 8, -1), ("XQ", 14, -1), ("FD", 8, -1),
+    ("ZZ", 18, 0),
+]
+# fmt: on
+
+
+def test_part2_ex3_walk_matches_the_statement_leg_by_leg():
+    """Replay Part Two's narrated 396-step walk, leg by leg.
+
+    The same treatment example 1's walk got, at scale: each walking leg
+    is checked as a plain warp-blind BFS distance to the inner (+1) or
+    outer (-1) end the narration names, each transit costs 1, and the
+    books must close exactly -- 364 walked + 32 warped = 396, ending at
+    ZZ on level 0 after touching level 10 and resurfacing twice. This
+    pins the inner/outer classification across all 13 pairs of a maze
+    the bounding-box rule never saw before, against the statement's own
+    words rather than the implementation's opinion of itself.
+    """
+    maze = parse_input(EX3)
+    pos, level, total, deepest = maze.start, 0, 0, 0
+    for label, steps, sense in EX3_LEGS:
+        if sense == 0:
+            target = maze.end
+        else:
+            (target,) = (t for t in maze.labels[label] if maze.warps[t][1] == sense)
+        assert walk_dist(maze, pos, target) == steps, (label, steps)
+        total += steps
+        if sense == 0:
+            pos = target
+        else:
+            pos = maze.warps[target][0]
+            level += sense
+            deepest = max(deepest, level)
+            total += 1
+    assert (total, level, deepest) == (396, 0, 10)
+    assert part2(maze) == total
 
 
 def test_well_part1():

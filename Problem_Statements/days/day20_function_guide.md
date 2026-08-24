@@ -1,14 +1,12 @@
 # Day 20 — Donut Maze (function guide)
 
 > Code: [python/day20.py](../../python/day20.py). Tests:
-> [python/tests/test_day20.py](../../python/tests/test_day20.py) (16 tests).
-> Statement: [day20.md](day20.md) — **Part One only for now**; Part Two's
-> text unlocks when Part One's answer is submitted. Paste it in then, and
-> add its worked example as a test.
+> [python/tests/test_day20.py](../../python/tests/test_day20.py) (18 tests).
+> Statement: [day20.md](day20.md), both parts.
 >
-> **Answers: Part 1 = 442, Part 2 = 5208 — UNVERIFIED.** Neither has been
-> submitted to adventofcode.com yet, so `LOCKED = None` and
-> `test_real_input` reports these values and skips. Submit, then lock.
+> **Answers: Part 1 = 442 (verified on adventofcode.com), Part 2 = 5208 —
+> not yet submitted.** `LOCKED = (442, None)`: part 1 is asserted, part 2
+> is reported by the skip until the site accepts it.
 
 ## The puzzle in one paragraph
 
@@ -126,7 +124,9 @@ claim becomes a test:
   has headroom that a doubling cannot disturb.
 * `test_part2_ex2_has_no_balanced_route`: the 58-step example stays
   routeless even at cap 50 — the raise is a real negative, not a cap
-  artefact at 10.
+  artefact at 10. (Part Two's text, once unlocked, confirmed it in as
+  many words: "there is no path that brings you to `ZZ` at the
+  outermost level.")
 
 And the optimal walk itself is a pleasing object: 5208 steps = 5088
 walking + **120 warp transits, exactly 60 descents and 60 ascents**,
@@ -134,15 +134,31 @@ touching level 25 at its deepest. The books balance to the step, because
 they must — every descent that isn't repaid strands you below the only
 `ZZ` that counts.
 
+### The statement's worked example: 396 steps, replayed leg by leg
+
+Part Two's own example (13 portal pairs, interleaved) answers **396**,
+diving to level 10 and resurfacing twice — and, like Part One, the
+statement narrates the entire walk. The tests pin it both ways: the bare
+total, and `test_part2_ex3_walk_matches_the_statement_leg_by_leg`, which
+replays all 33 narrated legs — each "Walk from X to Y (N steps)" checked
+as a warp-blind BFS distance to the inner ("Recurse into") or outer
+("Return to") end the narration names, each transit costing 1 — and
+closes the books exactly: 364 walked + 32 warped = 396, ending at `ZZ`
+on level 0. That extends the inner/outer classification pin from example
+1's three pairs to thirteen, on the statement's own words. (The example
+maze itself was extracted from [day20.md](day20.md) by script, not
+retyped — a 37-line transcription is 37 chances to test a typo instead
+of the parser.)
+
 ### The maze that forces recursion: `WELL`
 
 The statement's first example answers 26 recursively *because its portals
 are useless* (every warp digs deeper; the portal-free 26-step walk — a
 number the statement itself supplies — stands). Its second example has no
-recursive route at all. Neither shows recursion *working*, and Part Two's
-own worked example is still locked — so the tests carry `WELL`, a
-hand-built donut whose ring corridor is cut into two arcs that only meet
-through portals:
+recursive route at all. Neither shows recursion *working*, and `WELL`
+predates the Part Two unlock as the tests' minimal witness that it does:
+a hand-built donut whose ring corridor is cut into two arcs that only
+meet through portals:
 
 ```text
         A
@@ -270,7 +286,11 @@ is probably a pessimization here.
   coming from the statement's own text and re-derived by stripping
   `warps` and re-running `part1` — not from the recursive code judging
   itself.
-* **Example 2 has no balanced route**, at the default cap and at 50.
+* **Example 2 has no balanced route**, at the default cap and at 50 —
+  the claim Part Two's text later confirmed verbatim.
+* **Part Two's worked example**: 396, plus the full 33-leg replay of the
+  statement's narrated walk (see above) — walking distances, all 13
+  pairs' inner/outer senses, 364 + 32 = 396, final level 0, deepest 10.
 * **`WELL`**: 13 flat vs 28 recursive, both hand-counted; `max_depth=0`
   raises.
 * **Parse validation raises** on a label touching two open tiles and on
@@ -283,8 +303,8 @@ is probably a pessimization here.
   back with the opposite delta), and the six stranded tiles.
 * **The depth cap's evidence**: no route at 24; identical answers at
   25 / 27 / 54.
-* **`check_locked(20, LOCKED)`** with `LOCKED = None` until the site
-  accepts — currently reports 442 / 5208 and skips.
+* **`check_locked(20, LOCKED)`** with `LOCKED = (442, None)`: part 1 is
+  a hard assertion, part 2 reports 5208 and skips until the site accepts.
 
 ## Benchmarks
 
@@ -326,7 +346,5 @@ state bookkeeping changes species.
 
 ## What's next
 
-Two loose ends for the next session: paste Part Two's statement into
-[day20.md](day20.md) once Part One's 442 is submitted, add its worked
-example as a test, and move both accepted answers into `LOCKED`. Then
+One loose end: submit Part 2's 5208 and move it into `LOCKED`. Then
 [Day 21](day21.md) — the Intcode machine returns.
