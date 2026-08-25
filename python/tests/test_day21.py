@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from itertools import product
 
+import day21_disasm
 import day21_synth
 import pytest
 from day21 import (
@@ -44,12 +45,14 @@ from day21 import (
     SIGHT_RUN,
     SIGHT_WALK,
     parse_input,
+    part1,
+    part2,
     run_droid,
     run_script,
     survey,
 )
 
-LOCKED = (None, None)
+LOCKED = (19354392, 1139528802)  # verified on adventofcode.com
 
 # The hull under the statement's `NOT D J` death rendering.
 STATEMENT_HULL = "#####.###########"
@@ -284,6 +287,140 @@ def test_failed_survey_renders_the_last_moments(real_input):
 
 
 # ------------------------------------------------------------------ the input
+
+
+# ---------------------------------------- the disassembly (day21_disasm)
+
+# inputs/day21_alt.txt is another user's program -- gitignored like every
+# input, so the parametrized tests skip on a clone that lacks it.
+
+
+@pytest.mark.parametrize("day", [21, "21_alt"])
+def test_static_answers_match_the_machine(real_input, day):
+    """Both damage totals recovered by pure arithmetic over the hull cells
+    (addr * value * column, summed over the holes), against the live VM --
+    Day 17's 'answers off the disk' cross-check, on both users' files."""
+    mem = parse_input(real_input(day))
+    static = day21_disasm.static_answers(mem, PART1_SCRIPT, PART2_SCRIPT)
+    assert static == (part1(list(mem)), part2(list(mem)))
+
+
+@pytest.mark.parametrize("day", [21, "21_alt"])
+def test_recovered_courses_share_one_profile(real_input, day):
+    """BOTH files store a 7-chunk WALK course with 16 holes and a 153-chunk
+    RUN course with 674 holes -- the generator fixes the course profile and
+    shuffles only where the holes fall."""
+    walk, run = day21_disasm.recover_courses(parse_input(real_input(day)))
+
+    def holes(course):
+        return sum(day21_disasm.chunk_window(v).count(".") for _, v in course)
+
+    assert (len(walk), holes(walk)) == (7, 16)
+    assert (len(run), holes(run)) == (153, 674)
+
+
+def test_first_walk_chunk_is_the_statement_window(real_input):
+    """The statement's example rendering is this input's first hull chunk,
+    decoded: 9-bit value 255 -> the window the death replay printed."""
+    walk, _ = day21_disasm.recover_courses(parse_input(real_input(21)))
+    assert day21_disasm.chunk_window(walk[0][1])[5:22] == STATEMENT_HULL
+
+
+def test_stepper_replays_the_suicide_and_the_crossing():
+    """The faithful Python stepper: `NOT D J` dies in the statement's chunk,
+    the shipping WALK script crosses it."""
+    window = day21_disasm.chunk_window(255)
+    assert not day21_disasm.cross_chunk(window, ("NOT D J",))
+    assert day21_disasm.cross_chunk(window, PART1_SCRIPT)
+
+
+def window_dp_crossable(window: str, start: int = 5, end: int = 21) -> bool:
+    """Perfect planning across one 32-column window (step +1 / jump +4)."""
+    reach = [False] * (len(window) + JUMP)
+    for i in reversed(range(start, len(window) + JUMP)):
+        if i >= end:
+            reach[i] = True
+        elif window[i] == "#":
+            reach[i] = reach[i + 1] or reach[i + JUMP]
+    return reach[start]
+
+
+def test_guard_is_complete_for_the_chunk_universe():
+    """Because hazards come quantised into 9-bit chunks with guaranteed
+    footing on both sides, the RUN guard crosses EVERY chunk that planning
+    can cross: all 344 crossable patterns of the 512. The 15-tile hull that
+    defeats the guard (test_run_policy_is_not_universal) needs an 11-tile
+    hazard span a chunk cannot express -- so on this encoding, the machine
+    accepting the script is a theorem, not luck. The unguarded WALK policy
+    dies in 22 of the 344, which is why Part 2 exists."""
+    crossable = guarded = unguarded_deaths = 0
+    for value in range(512):
+        window = day21_disasm.chunk_window(value)
+        can = window_dp_crossable(window)
+        crossable += can
+        guarded += day21_disasm.cross_chunk(window, PART2_SCRIPT)
+        if can and not day21_disasm.cross_chunk(window, PART1_SCRIPT):
+            unguarded_deaths += 1
+        assert day21_disasm.cross_chunk(window, PART2_SCRIPT) == can, value
+    assert (crossable, guarded, unguarded_deaths) == (344, 344, 22)
+
+
+@pytest.mark.parametrize("day", [21, "21_alt"])
+def test_run_course_needs_the_guard(real_input, day):
+    """Each file's RUN course carries exactly 10 trap chunks that kill the
+    unguarded policy -- the reason ¬(ABC)·D alone survives WALK but not RUN."""
+    _, run = day21_disasm.recover_courses(parse_input(real_input(day)))
+    traps = [v for _, v in run if not day21_disasm.cross_chunk(day21_disasm.chunk_window(v), PART1_SCRIPT)]
+    assert len(traps) == 10
+
+
+def test_damage_is_script_independent(real_input):
+    """A different surviving script (the 9-instruction RUN variant) reports
+    the SAME damage: the checksum sums over the holes, and every survivor
+    overflies every hole exactly once."""
+    nine = (*PART1_SCRIPT, "NOT E T", "NOT T T", "OR H T", "AND T J")
+    assert survey(parse_input(real_input(21)), nine, "RUN")[1] == LOCKED[1]
+
+
+@pytest.mark.parametrize(
+    "script, error",
+    [
+        (("NOT E J",), "Invalid first argument"),  # E..I are RUN-only sensors
+        (("XOR A J",), "Invalid operation"),
+        (("NOT A B",), "Invalid second argument"),
+        (("NOT A J",) * 16, "Out of memory"),
+    ],
+)
+def test_assembler_rejects_bad_scripts(real_input, script, error):
+    """The parser's four error strings, each provoked through the console;
+    every death is a diagnosis printed by `die`, then a halt with no damage."""
+    transcript, damage = survey(parse_input(real_input(21)), script, "WALK")
+    assert damage is None
+    assert error in transcript
+
+
+def test_diff_classification(real_input):
+    """The whole two-file comparison, pinned: 540 differing cells = 383
+    encoding-flip cells across 175 instructions (each proved semantically
+    identical after canonicalisation) + 157 hull cells. The hull is the only
+    thing that distinguishes two users' puzzles."""
+    stats = day21_disasm.classify_diffs(parse_input(real_input(21)), parse_input(real_input("21_alt")))
+    assert stats == {
+        "differing cells": 540,
+        "encoding-flip cells": 383,
+        "flipped instructions": 175,
+        "hull cells": 157,
+    }
+
+
+@pytest.mark.parametrize("day", [21, "21_alt"])
+def test_full_listing_accounts_for_every_cell(real_input, day):
+    """2,050 cells, every one listed exactly once (full_listing asserts the
+    coverage internally); 160 of them are hull chunks."""
+    mem = parse_input(real_input(day))
+    assert len(mem) == 2050
+    text = day21_disasm.full_listing(mem)
+    assert sum(1 for line in text.splitlines() if ".hull" in line) == 160
 
 
 def test_crlf():
