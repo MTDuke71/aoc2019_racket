@@ -29,7 +29,6 @@ Several steps later...
 
                       Your deck
 9 8 7 6 5 4 3 2 1 0   New stack
-
 ```
 
 Finally, pick up the new stack you've just created and use it as the deck for the next technique.
@@ -47,7 +46,6 @@ Top          Bottom
               0 1 2   Cut cards
 
 3 4 5 6 7 8 9 0 1 2   Your deck
-
 ```
 
 You've also been getting pretty good at a version of this technique where `N` is negative! In that case, cut (the absolute value of) `N` cards from the bottom of the deck onto the top.  For example, to `cut -4`:
@@ -63,7 +61,6 @@ Top          Bottom
 6 7 8 9               Cut cards
 
 6 7 8 9 0 1 2 3 4 5   Your deck
-
 ```
 
 *To `deal with increment N`*, start by clearing enough space on your table to lay out all of the cards individually in a long line.  Deal the top card into the leftmost position. Then, move `N` positions to the right and deal the next card there. If you would move into a position past the end of the space on your table, wrap around and keep counting from the leftmost card again.  Continue this process until you run out of cards.
@@ -115,7 +112,6 @@ Move right 3, wrapping around, and deal:
 And so on:
 
 0 7 4 1 8 5 2 9 6 3   Space on table
-
 ```
 
 Positions on the table which already contain cards are still counted; they're not skipped.  Of course, this technique is carefully designed so it will never put two cards in the same position or leave a position empty.
@@ -129,7 +125,6 @@ deal with increment 7
 deal into new stack
 deal into new stack
 Result: 0 3 6 9 2 5 8 1 4 7
-
 ```
 
 ```text
@@ -137,7 +132,6 @@ cut 6
 deal with increment 7
 deal into new stack
 Result: 3 0 7 4 1 8 5 2 9 6
-
 ```
 
 ```text
@@ -145,7 +139,6 @@ deal with increment 7
 deal with increment 9
 cut -2
 Result: 6 3 0 7 4 1 8 5 2 9
-
 ```
 
 ```text
@@ -160,10 +153,22 @@ deal with increment 9
 deal with increment 3
 cut -1
 Result: 9 2 5 8 1 4 7 0 3 6
-
 ```
 
 Positions within the deck count from `0` at the top, then `1` for the card immediately below the top card, and so on to the bottom.  (That is, cards start in the position matching their number.)
 
 After shuffling your *factory order* deck of 10007 cards, *what is the position of card `2019`?*
 
+--- Part Two ---
+
+After a while, you realize your shuffling skill won't improve much more with merely a single deck of cards. You ask every 3D printer on the ship to make you some more cards while you check on the ship repairs. While reviewing the work the droids have finished so far, you think you see [Halley&#39;s Comet](https://en.wikipedia.org/wiki/Halley%27s_Comet) fly past!
+
+When you get back, you discover that the 3D printers have combined their power to create for you a single, giant, brand new, *factory order* deck of  *`119315717514047` space cards* .
+
+Finally, a deck of cards worthy of shuffling!
+
+You decide to apply your complete shuffle process (your puzzle input) to the deck  *`101741582076661` times in a row* .
+
+You'll need to be careful, though - one wrong move with this many cards and you might *overflow* your entire ship!
+
+After shuffling your new, giant, *factory order* deck that many times, *what number is on the card that ends up in position `2020`?*
