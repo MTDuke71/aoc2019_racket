@@ -19,6 +19,62 @@ The deck sizes are the message: one big deck alone is a petabyte
 survive contact with part 2. The day is a disguised algebra exam, and the
 exam has one question: *what is a shuffle, really?*
 
+## What an affine map is
+
+An **affine map** (in one dimension) is any function of the form
+
+> f(x) = a·x + b
+
+— a scale followed by a shift. It is the everyday "y = mx + b" line, but
+the everyday name for that is wrong: a *linear* map, in the strict algebra
+sense, must satisfy f(x + y) = f(x) + f(y), which forces f(0) = 0 and kills
+the +b. Affine is the honest name for "linear plus a translation". Drop
+b and you have a linear map; drop a (set it to 1) and you have a pure
+shift; affine is the closure of both.
+
+Three properties make the class worth naming, and all three are the day:
+
+1. **Two numbers describe the whole function.** However the map was built,
+   (a, b) is a complete, finite description. A hundred shuffle techniques
+   are still just one (a, b).
+2. **They compose into each other.** Doing (a, b) then (c, d) is
+   c·(a·x + b) + d = (ca)·x + (cb + d) — another affine map. The class is
+   closed under composition, so "apply this pipeline of 100 maps" collapses
+   to "apply one map", and "apply that map 10¹⁴ times" stays inside the
+   class too.
+3. **They invert (when a is invertible).** Solving y = a·x + b for x gives
+   x = a⁻¹·(y − b) — again affine. Closed under composition and inversion,
+   with an identity (1, 0): that is a *group*, which is where
+   [the section below](#the-problem-within-the-problem-the-affine-group-mod-p)
+   picks up.
+
+Here the domain is not the real line but **ℤ/mℤ** — positions on a deck of
+m cards, arithmetic wrapping mod m. Nothing above changes, except that
+"a is invertible" now means gcd(a, m) = 1, and an invertible affine map on
+a finite set is a **permutation**: every position goes somewhere, no two
+collide. That is the bridge from algebra back to cards — *a shuffle is a
+permutation, and these particular shuffles are the affine ones*, the
+permutations cheap enough to name with two integers. A concrete taste, on
+the 10-card example deck: `deal with increment 3` is (3, 0), `cut 2` is
+(1, −2), and their composition is (3·1, 1·0 + (−2)) = (3, −2) — card 7
+lands at 3·7 − 2 ≡ 9 (mod 10), and the full deck reads
+`[4, 1, 8, 5, 2, 9, 6, 3, 0, 7]` (run against `Affine.then` and `deck`;
+the statement's own combined examples are pinned in the tests).
+
+The idea scales up in two directions worth knowing about. In higher
+dimensions, affine is matrix-times-vector plus a vector — f(**x**) = A**x**
++ **b** — and the standard trick is to make it *linear* one dimension up by
+carrying a constant 1: [[A, b], [0, 1]] acting on (**x**, 1). That is
+exactly why 3-D graphics pipelines use 4×4 matrices — the fourth
+coordinate is what lets translation ride along with rotation and scale in
+a single matrix product — and it is the same [[a, b], [0, 1]] form the
+[exponentiation section](#part-2-reverse-the-question-then-exponentiate)
+uses to read `repeat` as matrix exponentiation. And the map x → a·x + b
+mod m applied over and over is a **linear congruential generator** — the
+classic PRNG is nothing but an affine map iterated, which is why part 2's
+"shuffle 10¹⁴ times" and a PRNG's "jump ahead 10¹⁴ steps" are the same
+problem with the same O(log k) answer.
+
 ## The shape of the day: every technique is an affine map
 
 Track a single card's **position** x in a deck of m cards. Each technique
