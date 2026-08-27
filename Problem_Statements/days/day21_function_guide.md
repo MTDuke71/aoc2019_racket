@@ -249,6 +249,23 @@ the only debugging channel the day offers.
   decoded), along with the damage formula — both answers now come off the
   disk with the VM never started.
 
+### Seeing the hull
+
+[python/viz_day21.py](../../python/viz_day21.py) draws the recovered hull
+and the droid's actual flight over it: the faithful `cross_chunk` stepper
+re-run with a flight recorder (one column-altitude sample per tick), the
+32-column windows stitched into one ribbon — each chunk's exit column is
+the next chunk's entry, so the seam is exact — and rendered as ground
+tiles, outlined holes, the altitude profile, and a marker at every
+take-off. Part 1 is one band of 7 chunks (16 holes, 11 jumps over 113
+tiles); Part 2 wraps all 160 chunks, 10 per band, each band labelled with
+its first hull cell's address to tie it back to the
+[disassembly](day21_disassembly.md) (690 holes, 417 jumps over 2,561
+tiles). The PNGs land in `maps/`, gitignored like the
+[Day 15](day15_function_guide.md) maps: the picture is the input's
+payload — all 160 nine-bit values read straight off it — so committing it
+would republish the input. Regenerate with `python python/viz_day21.py`.
+
 ## Possible optimization
 
 Nothing algorithmic is on the table — the wall clock *is* the Intcode
