@@ -1,4 +1,7 @@
 inputs/*.txt
+# Day 22 input rendered as a per-line table of affine maps: the technique
+# column reproduces the puzzle input verbatim, so it stays out with the rest.
+inputs/day22_affine_table.md
 reference/
 
 # Full annotated listings (scripts/intcode_disasm.rkt --full). Every cell of
