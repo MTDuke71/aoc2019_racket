@@ -1,8 +1,8 @@
 # Day 22 — Slam Shuffle (function guide)
 
 > Code: [python/day22.py](../../python/day22.py). Tests:
-> [python/tests/test_day22.py](../../python/tests/test_day22.py) (15 test
-> functions, 332 parametrized cases). Statement: [day22.md](day22.md).
+> [python/tests/test_day22.py](../../python/tests/test_day22.py) (18 test
+> functions, 342 parametrized cases). Statement: [day22.md](day22.md).
 >
 > **Answers: Part 1 = 6850, Part 2 = 13224103523662** (both verified on
 > adventofcode.com; `LOCKED = (6850, 13224103523662)`).
@@ -153,6 +153,50 @@ The one non-optional detail: reduce mod m at *every* composition step —
 after the first few squarings the exact integers would double in size each
 round. This is the only place a modulus enters before the final answer.
 
+### The road not taken: invert every operation
+
+There is a second standard architecture for part 2, used in [Jonathan
+Paulson's walkthrough](https://www.youtube.com/watch?v=U4AE92wnNYc) among
+others: instead of composing the *forward* shuffle and inverting once at
+the end, **invert each technique individually** and compose the inverses.
+Each primitive has a clean inverse:
+
+| technique | inverse map | (a, b) |
+|---|---|---|
+| `deal into new stack` | itself — applying (−1, −1) twice is the identity | (−1, −1) |
+| `cut n` | `cut -n` | (1, n) |
+| `deal with increment n` | `deal with increment n⁻¹ mod m` | (n⁻¹ mod m, 0) |
+
+Then the powered *inverse* map is applied **forward** to position 2020 —
+no final inversion step, because the whole map already runs backwards.
+Both roads provably meet: `test_per_operation_inversion_agrees` folds the
+inverted primitives over the real input and gets exactly the (a⁻¹,
+−a⁻¹·b) map `card_at` applies, on both real moduli; and since
+(f⁻¹)ᵏ = (fᵏ)⁻¹, powering the inverse and inverting the power agree
+through part 2's full exponent (same test), so this route lands on the
+same locked answer. Paulson's derivation of the k-fold power is the
+[geometric closed form](#the-problem-within-the-problem-the-affine-group-mod-p)
+rather than the ladder — `a**2*startpos + a*b + b, ...` summed to
+aᵏ·x + b·(aᵏ−1)·(a−1)⁻¹ — which our `geometric` test helper pins as
+equivalent to `repeat`.
+
+Two structural costs distinguish the routes, one trap and one property:
+
+* **The fold order must flip.** (f ∘ g)⁻¹ = g⁻¹ ∘ f⁻¹: to undo a
+  pipeline you undo its stages *bottom-up*. The inverted primitives folded
+  in original line order denote a genuinely different map —
+  `test_inversion_fold_order_matters` pins the wrong-order fold as wrong,
+  because forgetting the reversal is this route's classic bug.
+* **The parse stops being deck-size-agnostic.** `deal with increment n`
+  inverts to n⁻¹ *mod m* — no modulus, no inverse. So this route pays a
+  modular inverse per increment line (44 for this input) at parse time and
+  must parse once per deck size, where the forward fold parses once over
+  exact integers and defers all inversion to the single
+  `pow(a, -1, m)` in `card_at`. That is the real trade: inversion paid 44
+  times early buying the inverse map as a first-class object, versus once
+  late keeping the parse pure. Speed is a wash — both are one O(log k)
+  power — so the choice is architectural taste.
+
 ## The problem within the problem: the affine group mod p
 
 Because both deck sizes are prime and every `deal with increment` argument
@@ -274,6 +318,11 @@ also destroy the one-parse-serves-all-decks property the tests lean on.
   not a sentence.
 * **Inversion**: `card_at ∘ position` is the identity at every position of
   every example deck, and on both real moduli for card 2019.
+* **The invert-every-operation route** (the sidebar above): the inverted
+  primitives folded bottom-up equal the invert-at-end map on both real
+  moduli and through part 2's exponent; the same primitives folded
+  top-down are pinned as *wrong*; and the inverted parse undoes all eight
+  example decks card by card.
 * **Group theory**: order divides m·(m−1) (Lagrange, at 40 and at 10⁸);
   the real shuffle's exact orders (5003, and primitive-root maximal), with
   the divisor-elimination argument spelled out in the test body.

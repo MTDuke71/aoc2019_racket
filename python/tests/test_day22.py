@@ -14,6 +14,11 @@ test, not a sentence):
   * The geometric-series CLOSED FORM (a^k, b*(a^k-1)/(a-1)) -- the guide's
     sidebar -- agrees with `repeat` on both real moduli at part 2's real
     exponent. The a = 1 branch is exercised separately (a cut-only shuffle).
+  * The INVERT-EVERY-OPERATION route (each technique inverted, folded in
+    reverse line order -- Jonathan Paulson's approach) denotes the same
+    map as our invert-once-at-the-end `card_at`, on both real moduli and
+    through part 2's full exponent; and the reverse fold order is
+    load-bearing ((f o g)^-1 = g^-1 o f^-1), pinned by a wrong-order case.
   * `card_at` inverts `position` at every position of every example deck,
     and the composed real map is invertible mod BOTH deck sizes because
     each is prime and a mod m is nonzero -- `pow(a, -1, m)` is Fermat, and
@@ -133,6 +138,80 @@ def test_closed_form_a_equals_1_branch():
     assert shuffle.a == 1
     for k in (0, 1, 7, 12345):
         assert geometric(shuffle, k, DECK) == repeat(shuffle, k, DECK) == Affine(1, -7 * k % DECK)
+
+
+def inverted_primitives(text: str, m: int) -> list[Affine]:
+    """Each technique's INVERSE map, in original line order, mod m.
+
+    New-stack is self-inverse, cut n inverts to cut -n, and increment n
+    inverts to increment n^-1 mod m -- that modular inverse is why this
+    parse, unlike `parse_input`, cannot stay deck-size-agnostic.
+    """
+    inverse = {
+        "deal into new stack": lambda arg: Affine(-1, -1),
+        "cut": lambda arg: Affine(1, arg),
+        "deal with increment": lambda arg: Affine(pow(arg, -1, m), 0),
+    }
+    out = []
+    for line in text.strip().splitlines():
+        line = line.strip()
+        name = line.rstrip("-0123456789 ")
+        arg = int(line[len(name) :]) if line[len(name) :].strip() else 0
+        out.append(inverse[name](arg))
+    return out
+
+
+def inverted(text: str, m: int) -> Affine:
+    """The guide's sidebar route: invert every operation, fold in REVERSE.
+
+    (f o g)^-1 = g^-1 o f^-1, so the inverted primitives compose walking
+    the input bottom-up (test_inversion_fold_order_matters pins that the
+    reversal is load-bearing, not a convention).
+    """
+    shuffle = Affine(1 % m, 0)
+    for prim in reversed(inverted_primitives(text, m)):
+        shuffle = shuffle.then(prim, m)
+    return shuffle
+
+
+@pytest.mark.parametrize("text, _", EXAMPLES)
+def test_inverted_parse_undoes_the_examples(text, _):
+    fwd, inv = parse_input(text), inverted(text, 10)
+    for card in range(10):
+        assert position(inv, 10, position(fwd, 10, card)) == card
+
+
+def test_inversion_fold_order_matters():
+    """The same inverted primitives folded top-down give the WRONG map."""
+    prims = inverted_primitives(EX4, 10)
+    wrong = Affine(1, 0)
+    for prim in prims:
+        wrong = wrong.then(prim, 10)
+    assert wrong != inverted(EX4, 10)
+
+
+def test_per_operation_inversion_agrees(real_input):
+    """Invert-every-op (Paulson's route) == invert-once-at-the-end (ours).
+
+    Folding the inverted primitives bottom-up reproduces exactly the map
+    `card_at` applies -- (a^-1, -a^-1 * b) -- on both real moduli; and
+    (f^-1)^k = (f^k)^-1, so powering the inverse forward answers part 2:
+    the two routes differ in where the modular inversions happen (44 at
+    parse time vs one at the end), not in the map they denote.
+    """
+    text = real_input(22)
+    fwd = parse_input(text)
+    for m in (DECK, BIG_DECK):
+        inv = inverted(text, m)
+        a_inv = pow(fwd.a, -1, m)
+        assert inv == Affine(a_inv, -a_inv * fwd.b % m)
+        assert inv.then(Affine(fwd.a % m, fwd.b % m), m) == Affine(1, 0)
+        for k in (1, 2, REPEATS):
+            fk = repeat(fwd, k, m)
+            fk_a_inv = pow(fk.a, -1, m)
+            assert repeat(inv, k, m) == Affine(fk_a_inv, -fk_a_inv * fk.b % m)
+    inv_big = inverted(text, BIG_DECK)
+    assert position(repeat(inv_big, REPEATS, BIG_DECK), BIG_DECK, 2020) == day22.part2(fwd)
 
 
 @pytest.mark.parametrize("m, order", [(10, 40), (DECK, DECK * (DECK - 1))])
