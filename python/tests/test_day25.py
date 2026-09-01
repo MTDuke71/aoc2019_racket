@@ -302,6 +302,41 @@ def test_electromagnet_locks_the_dispatcher(real_input):
     assert reply is not None and "stuck" in reply
 
 
+def test_ship_is_a_tree_with_impossible_geometry(real_input):
+    """The map facts the figures lean on (python/viz_day25.py).
+
+    20 rooms, 19 door pairs, reached by walking from the start: a TREE --
+    exploration never actually needed its visited-set for cycle safety.
+    And the compass directions admit no consistent grid embedding: placing
+    rooms by their own doors (north = one cell up, etc.) lands five pairs
+    of distinct rooms on the same spot. The ship cannot be drawn as a deck
+    plan, which is why the figure draws it as the tree it is.
+    """
+    program = parse_input(real_input(25))
+    engine = day25_disasm.recover_engine(program)
+    edges = {frozenset((addr, dest)) for addr, room in engine.rooms.items() for dest in room.doors if dest}
+    assert (len(engine.rooms), len(edges)) == (20, 19)  # connected + n-1 = tree
+
+    step = dict(zip(day25_disasm.DIRECTIONS, [(0, 1), (1, 0), (0, -1), (-1, 0)]))
+    coords = {engine.start_room: (0, 0)}
+    queue = [engine.start_room]
+    collisions = set()
+    while queue:
+        addr = queue.pop(0)
+        x, y = coords[addr]
+        for slot, dest in enumerate(engine.rooms[addr].doors):
+            if not dest or dest in coords:
+                continue
+            dx, dy = step[day25_disasm.DIRECTIONS[slot]]
+            pos = (x + dx, y + dy)
+            for other, where in coords.items():
+                if where == pos:
+                    collisions.add(frozenset((dest, other)))
+            coords[dest] = pos
+            queue.append(dest)
+    assert len(collisions) == 5
+
+
 def test_full_listing_accounts_for_every_cell(real_input):
     """The generated listing tiles all 4807 cells or raises -- run it."""
     program = parse_input(real_input(25))

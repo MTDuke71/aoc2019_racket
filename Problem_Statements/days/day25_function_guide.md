@@ -50,6 +50,29 @@ human with three classical pieces:
    means 256 candidate load-outs, walked in **reflected Gray code** order
    so consecutive trials differ by a single take-or-drop.
 
+## The ship, drawn
+
+![The ship as a tree](images/day25_ship_map.png)
+
+Drawn by [python/viz_day25.py](../../python/viz_day25.py) from the static
+engine recovery — the game is never run. Two map facts, both pinned by
+`test_ship_is_a_tree_with_impossible_geometry`, decide how it is drawn:
+
+- **The ship is a tree.** Twenty rooms, nineteen door pairs, no cycles —
+  the DFS's visited-set never actually earned its keep, and every room has
+  exactly one path to the checkpoint.
+- **The geometry is impossible.** Lay rooms out by their own compass doors
+  (north = one cell up, and every door *is* faithfully reciprocated) and
+  five pairs of distinct rooms land on the same grid cell. The classic
+  text-adventure non-Euclidean shrug — so the figure keeps the directions
+  as edge letters and draws the topology honestly as a tree instead of
+  pretending a deck plan exists.
+
+Gold rooms hold the four winning items; teal item tags are safe (each with
+its power-of-two weight — see below), red ones are the five traps; the
+orange spine is the three-move route the droid walks to the checkpoint once
+loaded.
+
 ## The Day 25 code, form by form
 
 ### `Droid(VM)` — `run`, `send`, `fork`

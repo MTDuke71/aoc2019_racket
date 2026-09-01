@@ -164,6 +164,12 @@ the door. Which means the 33-cell table at 1901 does not merely gate part 1
 cells > 4368 →  000000000001010000000010000001000₂  =  2622472
 ```
 
+![Target is answer, drawn](images/day25_weights.png)
+
+(The figure — [python/viz_day25.py](../../python/viz_day25.py) — is built
+from this same static decode: the 33-bit strip is the table at 1901 read
+against 4368, and each safe item sits at its own power of two.)
+
 `static_password` reads the answer off the disk in ~9 ms, VM never started
 — against ~2.9 s for the played game. Day 23's rhyme continues: that input
 was generated from its own part-2 answer; this one *stores* its answer, one
