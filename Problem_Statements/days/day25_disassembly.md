@@ -17,13 +17,38 @@ which panicked on Day 23 — handles this image, and its output seeded the
 function map that the Python tool then re-derives and verifies from address 0
 outward.
 
+Better still, the vendored tool was *written for* this day: it ships its
+author's annotations in `data/25.symbols` (function and argument names, the
+`Location`/`Item` struct definitions, typed globals), and every code-section
+address in that file matches this input exactly — **the engine is identical
+across puzzle inputs; only the world data differs**. The author's input
+stores its threshold as 53 × 57 = 3021 against this one's 84 × 52 = 4368,
+and lays the same twenty room names out at shifted addresses with different
+wiring. [python/day25_symbols.py](../../python/day25_symbols.py) rebases the
+twenty `LOCATION_*` globals onto this input's rooms (from pass 2's
+recovery); `hlr --symbols day25_matt.symbols` then emits a fully-labelled
+decompilation — decoded strings, resolved room and item structs, typed
+signatures — kept locally as `intcode-disasm-master/day25_hlr.txt` beside
+the tool's day 17/19 outputs (the vendored tree is gitignored). The tool
+carves the image into 38 functions (it gives the bit-streamer's recursive
+core at 2763 its own name, `mod`, where the recovery folds it into
+`split_bits`); everywhere both analyses assign a name they agree —
+`array_foreach`/`for_each`, `verify_item_set_matches`/`weigh`,
+`print_encoded_string`/`print_str` — independent cross-validation of
+everything below, with one favour returned: the author left the
+char-matcher at 2585 as `fu2585`, which the recovery names `match_char`.
+The author's strings also settle the alert-sign nuance — the "heavier"
+message fires on verdict −1 because "Droids on this ship are heavier than
+the detected value" is the ship telling you that *you* are too light.
+
 ## The shape of the image
 
 ```
 0000..0033   main: enter(start_room); loop { print("Command?"); dispatch() }
 0034..1127   string pool (headers, messages, direction names at 66..91)
-1128..3093   36 functions with their globals interleaved, plus, at 1894..1983:
-             verb-string table, the 33-cell TARGET TABLE, verb-handler table
+1128..3093   36 functions (37 with split_bits' recursive core counted apart,
+             as the vendored tool does) with their globals interleaved, plus,
+             at 1894..1983: verb strings, the 33-cell TARGET TABLE, handlers
 2959..3009   2^0 .. 2^50 (divmod's bit table)
 3094..3123   the 30-cell line buffer
 3124..4600   twenty room structs, each followed by its name and description
