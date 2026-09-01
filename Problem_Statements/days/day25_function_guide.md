@@ -153,7 +153,11 @@ tool for the cross-checks):
 ~1.1 M `step()` calls per second — [Day 15](day15_function_guide.md)'s
 interpreter cost model holding steady through the eighth and final Intcode
 day. The game prints 119,622 characters of ASCII over the run, about a
-character per 29 VM steps. The winning load-out {fixed point, prime number,
+character per 29 VM steps. The whole session — all 557 commands and every
+reply, with the thirteen item probes shown as the indented forks they are —
+can be read as a transcript: `python python/day25_transcript.py` writes
+`day25_transcript.md` (gitignored, like the listings: the room text is the
+input's own payload). The winning load-out {fixed point, prime number,
 antenna, whirled peas} arrives at trial **236 of 256** with this
 exploration's collection order — Gray code guarantees coverage, not luck.
 

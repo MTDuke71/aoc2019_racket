@@ -12,6 +12,12 @@ reference/
 #   .venv\Scripts\python.exe python\day17_disasm.py --full > Problem_Statements/days/day17_listing.md
 Problem_Statements/days/*_listing.md
 
+# Day 25 session transcript (python/day25_transcript.py): the room
+# descriptions it quotes are the puzzle input's own text (54.6% of the
+# image), so it stays local like the listings. Regenerate:
+#   .venv\Scripts\python.exe python\day25_transcript.py
+Problem_Statements/days/*_transcript.md
+
 # Racket build artifacts
 compiled/
 *.zo
